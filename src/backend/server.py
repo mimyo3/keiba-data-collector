@@ -1,0 +1,125 @@
+"""FastAPI server for the database UI and existing collection workflows."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from src.helpers.db_helper import get_connection
+from src.jra_fetcher.html_workflow import fetch_jra_html_workflow
+from src.jra_fetcher.race_day_workflow import update_race_days_table
+from src.jra_fetcher.workflow import _iter_months, _validate_month
+from src.netkeiba_fetcher.api_entry import fetch_netkeiba_data_by_date_range
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FRONTEND_BUILD = PROJECT_ROOT / "frontend" / "build"
+
+app = FastAPI(title="Keiba API")
+
+TABLES = {
+    "horse_race_results",
+    "html_saves",
+    "jra_html_metadata",
+    "race_days",
+    "race_fetch_status",
+    "races",
+}
+
+
+class JraFetchRequest(BaseModel):
+    start_month: str
+    end_month: str
+
+
+class NetkeibaFetchRequest(BaseModel):
+    start_date: str
+    end_date: str
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+@app.get("/api/db/{table_name}")
+def get_table_rows(table_name: str) -> list[dict[str, Any]]:
+    """Return rows for one of the tables used by the existing UI."""
+    if table_name not in TABLES:
+        raise HTTPException(status_code=404, detail="Unknown table")
+
+    connection = get_connection()
+    try:
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(f"SELECT * FROM `{table_name}`")
+        return [
+            {key: _json_value(value) for key, value in row.items()}
+            for row in cursor.fetchall()
+        ]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.post("/api/jra/fetch-race-days")
+def fetch_jra_race_days(request: JraFetchRequest) -> dict[str, Any]:
+    """Run the existing JRA HTML and race-day registration steps."""
+    try:
+        _validate_month(request.start_month)
+        _validate_month(request.end_month)
+        if request.start_month < request.end_month:
+            raise ValueError("start_month must not be older than end_month")
+
+        fetch_jra_html_workflow(request.start_month, request.end_month)
+        for target_month in _iter_months(request.start_month, request.end_month):
+            update_race_days_table(target_month)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "message": (
+            f"JRA開催日を {request.start_month} から "
+            f"{request.end_month} まで取得・登録しました。"
+        )
+    }
+
+
+@app.post("/api/netkeiba/fetch-data-by-date-range")
+def fetch_netkeiba_data(request: NetkeibaFetchRequest) -> dict[str, Any]:
+    """Run the existing Netkeiba date-range workflow."""
+    try:
+        race_ids = fetch_netkeiba_data_by_date_range(
+            request.start_date,
+            request.end_date,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "message": f"netkeiba情報を取得・登録しました。処理件数: {len(race_ids)}",
+        "race_ids": race_ids,
+    }
+
+
+if FRONTEND_BUILD.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_BUILD, html=True), name="frontend")
+
+
+@app.get("/", include_in_schema=False)
+def frontend_index() -> FileResponse:
+    """Serve the built React application at the single public root."""
+    index = FRONTEND_BUILD / "index.html"
+    if not index.is_file():
+        raise HTTPException(status_code=503, detail="Frontend build is missing")
+    return FileResponse(index)
