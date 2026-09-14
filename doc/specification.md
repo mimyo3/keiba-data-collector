@@ -153,8 +153,6 @@
 | updated_at | DATETIME | 更新日時 |
 
 ### 6.3 付随テーブル
-- `kaishi_dates`
-  - 開始日一覧を管理する
 - `html_saves`
   - 保存元URL、保存先パス、HTML本体を記録する
 

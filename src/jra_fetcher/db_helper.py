@@ -114,3 +114,25 @@ def save_race_day(year_month: str, race_day: str) -> None:
         conn.close()
 
 
+def get_race_days(start_date: str, end_date: str) -> list[str]:
+    """Return stored race days in the requested inclusive date range."""
+    conn = get_jra_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT race_day
+            FROM race_days
+            WHERE race_day BETWEEN %s AND %s
+            ORDER BY race_day
+            """,
+            (start_date, end_date),
+        )
+        return [row[0].strftime("%Y%m%d") for row in cur.fetchall()]
+    except Exception as exc:
+        print(f"Error getting race days: {exc}")
+        raise
+    finally:
+        conn.close()
+
+

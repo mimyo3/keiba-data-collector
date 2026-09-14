@@ -1,7 +1,10 @@
-"""Top-level workflow for fetching JRA HTML and registering race days."""
+"""Top-level workflow for fetching JRA data and registering race results."""
+
+import calendar
 
 from src.jra_fetcher.html_workflow import fetch_jra_html_workflow
 from src.jra_fetcher.race_day_workflow import update_race_days_table
+from src.netkeiba_fetcher.api_entry import fetch_netkeiba_data_by_date_range
 
 
 def run_jra_workflow(start_month: str, end_month: str) -> None:
@@ -14,6 +17,11 @@ def run_jra_workflow(start_month: str, end_month: str) -> None:
     fetch_jra_html_workflow(start_month, end_month)
     for target_month in _iter_months(start_month, end_month):
         update_race_days_table(target_month)
+
+    start_date = f"{end_month[:4]}-{end_month[4:]}-01"
+    last_day = calendar.monthrange(int(start_month[:4]), int(start_month[4:]))[1]
+    end_date = f"{start_month[:4]}-{start_month[4:]}-{last_day:02d}"
+    fetch_netkeiba_data_by_date_range(start_date, end_date)
 
 
 def _validate_month(year_month: str) -> None:

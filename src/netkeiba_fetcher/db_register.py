@@ -16,9 +16,11 @@ from src.netkeiba_fetcher.db_schema import (
     RACE_FETCH_STATUS_TABLE_SQL,
 )
 
+from src.helpers.db_helper import get_connection
+
+
 __all__ = [
     "init_db",
-    "register_kaishi_dates",
     "register_prev_run",
     "register_races",
     "register_html_saves",
@@ -57,21 +59,7 @@ def register_kaishi_dates(dates: Iterable[str]) -> None:
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS kaishi_dates (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
-            date VARCHAR(10) UNIQUE NOT NULL,
-            registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
 
-    for date in dates:
-        cur.execute(
-            "INSERT IGNORE INTO kaishi_dates (date) VALUES (%s)",
-            (date,),
-        )
 
     conn.commit()
     cur.close()
@@ -96,7 +84,11 @@ def register_race_fetch_status(
         VALUES
             (%s, %s)
         ON DUPLICATE KEY UPDATE
-            race_date = VALUES(race_date)
+            race_date = VALUES(race_date),
+            html_fetched = FALSE,
+            parsed = FALSE,
+            registered = FALSE,
+            error_message = NULL
         """,
         (race_id, race_date),
     )

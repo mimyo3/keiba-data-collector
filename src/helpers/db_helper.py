@@ -8,10 +8,21 @@ current project.
 from __future__ import annotations
 
 import mysql.connector
+import os
 from typing import Any, Iterable, Tuple
 
-# from core.db_config import MYSQL_CONFIG
-from src.backend.db_config import MYSQL_CONFIG
+from dotenv import load_dotenv
+
+load_dotenv()
+
+MYSQL_CONFIG = {
+    "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
+    "port": int(os.getenv("MYSQL_PORT", "3306")),
+    "user": os.getenv("MYSQL_USER", ""),
+    "password": os.getenv("MYSQL_PASSWORD", ""),
+    "database": os.getenv("MYSQL_DATABASE", ""),
+    "unix_socket": os.getenv("MYSQL_SOCKET", ""),
+}
 
 
 def get_connection() -> mysql.connector.MySQLConnection:
