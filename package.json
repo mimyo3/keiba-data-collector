@@ -1,0 +1,16 @@
+{
+  "name": "multi-agent-system",
+  "version": "1.0.0",
+  "description": "A multi-agent system with conductor, coder, researcher, tester, and adversary agents",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "autogen": "^0.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  }
+}

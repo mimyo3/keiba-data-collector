@@ -1,0 +1,24 @@
+{
+  "agents": {
+    "conductor": {
+      "type": "conductor",
+      "description": "Orchestrates the multi-agent system"
+    },
+    "coder": {
+      "type": "coder",
+      "description": "Writes code for the system"
+    },
+    "researcher": {
+      "type": "researcher",
+      "description": "Conducts research for the system"
+    },
+    "tester": {
+      "type": "tester",
+      "description": "Writes tests for the system"
+    },
+    "adversary": {
+      "type": "adversary",
+      "description": "Challenges the system"
+    }
+  }
+}
