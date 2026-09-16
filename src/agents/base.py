@@ -34,3 +34,22 @@ class ConductorAgent(Agent):
             "status": "executed",
             "result": "Base conductor execution"
         }
+
+
+class AgentRegistry:
+    """Registry for managing agent instances."""
+    
+    def __init__(self):
+        self._agents = {}
+    
+    def register_agent(self, agent_type: str, agent_instance):
+        """Register an agent instance."""
+        self._agents[agent_type] = agent_instance
+    
+    def get_agent(self, agent_type: str):
+        """Get an agent instance by type."""
+        return self._agents.get(agent_type)
+    
+    def get_all_agents(self):
+        """Get all registered agents."""
+        return self._agents.copy()
