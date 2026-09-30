@@ -96,7 +96,7 @@ def fetch_netkeiba_data_by_month(year: int, month: int) -> List[str]:
         f"{calendar.monthrange(year, month)[1]:02d}"
     )
     
-from src.netkeiba_fetcher.db_schema import RACES_TABLE_SQL
+    return fetch_netkeiba_data_by_date_range(start_date, end_date)from src.netkeiba_fetcher.db_schema import RACES_TABLE_SQL
 from src.helpers.db_helper import get_connection
 
 def get_races_from_db() -> List[dict]:

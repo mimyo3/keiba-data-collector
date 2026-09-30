@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>テーブル要素確認用ページ</title>
+    <style>
+        .hidden-table {
+            display: none;
+        }
+        .invisible-table {
+            visibility: hidden;
+        }
+        .transparent-table {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>テーブル要素確認用ページ</h1>
+    
+    <!-- 表示されるテーブル -->
+    <table border="1">
+        <tr>
+            <th>表示されるテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- CSSで非表示にされたテーブル -->
+    <table class="hidden-table" border="1">
+        <tr>
+            <th>非表示のテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- CSSで非表示にされたテーブル -->
+    <table class="invisible-table" border="1">
+        <tr>
+            <th>非表示のテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- 透明なテーブル -->
+    <table class="transparent-table" border="1">
+        <tr>
+            <th>透明なテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+</body>
+</html>

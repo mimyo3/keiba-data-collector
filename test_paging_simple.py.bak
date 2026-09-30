@@ -1,0 +1,74 @@
+"""Simple test for paging adapter functionality without full dependencies."""
+
+import unittest
+from unittest.mock import MagicMock
+
+# Import the paging adapter
+from src.backend.paging_adapter import PagingAdapter, _wrap_api_call
+
+
+class TestPagingSimple(unittest.TestCase):
+    
+    def test_wrap_api_call_structure(self):
+        """Test that _wrap_api_call returns the correct structure."""
+        # Mock the get_table_rows function
+        mock_response = MagicMock()
+        mock_response.content = b'[{"id": 1, "name": "test"}]'
+        mock_response.headers = {"X-Total-Rows": "10"}
+        
+        # Mock the get_table_rows function to return our mock response
+        import src.backend.server
+        original_get_table_rows = src.backend.server.get_table_rows
+        src.backend.server.get_table_rows = MagicMock(return_value=mock_response)
+        
+        try:
+            result = _wrap_api_call("horse_race_results", page=1, limit=100)
+            
+            # Verify structure
+            self.assertIn("rows", result)
+            self.assertIn("page", result)
+            self.assertIn("limit", result)
+            self.assertIn("total", result)
+            self.assertIn("total_pages", result)
+            
+            # Verify values
+            self.assertEqual(result["page"], 1)
+            self.assertEqual(result["limit"], 100)
+            self.assertEqual(result["total"], 10)
+            self.assertEqual(result["total_pages"], 1)  # (10 + 100 - 1) // 100 = 1
+        finally:
+            # Restore original function
+            src.backend.server.get_table_rows = original_get_table_rows
+    
+    def test_paging_adapter_initialization(self):
+        """Test that PagingAdapter initializes correctly."""
+        # Test default initialization
+        adapter = PagingAdapter()
+        self.assertIsNotNone(adapter.api_client)
+        
+        # Test custom api_client
+        mock_client = MagicMock()
+        adapter = PagingAdapter(api_client=mock_client)
+        self.assertEqual(adapter.api_client, mock_client)
+
+    def test_get_page_count_method(self):
+        """Test the get_page_count method of PagingAdapter."""
+        # Mock the api_client
+        mock_client = MagicMock()
+        mock_client.return_value = {
+            "rows": [],
+            "page": 1,
+            "limit": 100,
+            "total": 250,
+            "total_pages": 3
+        }
+        
+        adapter = PagingAdapter(api_client=mock_client)
+        page_count = adapter.get_page_count("horse_race_results", limit=100)
+        
+        # Verify the call was made correctly
+        mock_client.assert_called_once_with("horse_race_results", page=1, limit=100)
+        self.assertEqual(page_count, 3)
+
+if __name__ == '__main__':
+    unittest.main()

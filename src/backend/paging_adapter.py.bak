@@ -1,0 +1,173 @@
+"""Paging adapter for database table access."""
+
+from typing import Any, Dict, List, Union
+from src.backend.server import get_table_rows
+
+
+def _wrap_api_call(table_name: str, page: int = 1, limit: int = 100) -> Dict[str, Any]:
+    """Wrap the existing API call to handle pagination parameters.
+    
+    This function calls the actual API function and returns a dictionary
+    with the expected structure.
+    
+    Args:
+        table_name: The name of the table to query
+        page: Page number (1-based)
+        limit: Number of rows per page (default: 100)
+        
+    Returns:
+        Dictionary containing rows and pagination metadata
+    """
+    # Call the actual API function
+    response = get_table_rows(table_name, page=page, limit=limit)
+    
+    # Extract rows from the response
+    rows = []
+    if hasattr(response, 'content'):
+        # If response is a Response object, parse the content
+        import json
+        try:
+            rows = json.loads(response.content.decode('utf-8'))
+        except (json.JSONDecodeError, AttributeError):
+            rows = []
+    else:
+        # If response is already a dict or list
+        rows = response if isinstance(response, list) else []
+    
+    # Extract total count from headers if available
+    total = 0  # Default value, in real implementation this should come from headers
+    if hasattr(response, 'headers') and 'X-Total-Rows' in response.headers:
+        try:
+            total = int(response.headers['X-Total-Rows'])
+        except (ValueError, KeyError):
+            total = 0  # Fallback
+    else:
+        # If we can't get total from headers, try to get it from response content
+        # This handles the case when response is a dict with total field
+        if isinstance(response, dict) and 'total' in response:
+            total = response['total']
+        elif isinstance(response, dict) and 'count' in response:
+            total = response['count']
+
+    # Calculate total pages
+    total_pages = (total + limit - 1) // limit if limit > 0 else 0
+    
+    return {
+        "rows": rows,
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "total_pages": total_pages
+    }
+
+
+class PagingAdapter:
+    """Adapter class to wrap existing API with pagination functionality."""
+
+    def __init__(self, api_client=None):
+        """Initialize the paging adapter with an API client.
+
+        Args:
+            api_client: Optional API client to wrap. If None, uses default _get_table_rows.
+        """
+        self.api_client = api_client or _wrap_api_call
+
+    def get_table_rows(self, table_name: str, page: int = 1, limit: int = 100) -> Dict[str, Any]:
+        """Get table rows with pagination.
+
+        Args:
+            table_name: The name of the table to query
+            page: Page number (1-based)
+            limit: Number of rows per page (default: 100)
+
+        Returns:
+            Dictionary containing rows and pagination metadata
+        """
+        # Call the existing API with pagination parameters
+        result = self.api_client(table_name, page=page, limit=limit)
+        
+        # Return the result with additional metadata if needed
+        return result
+
+    def get_all_rows_paginated(self, table_name: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get all rows from a table with pagination.
+
+        Args:
+            table_name: The name of the table to query
+            limit: Number of rows per page (default: 100)
+
+        Returns:
+            List of all rows from the table
+        """
+        all_rows = []
+        page = 1
+
+        while True:
+            # Get a page of rows
+            result = self.api_client(table_name, page=page, limit=limit)
+            
+            # Extract rows from the result
+            rows = result.get("rows", [])  # Get rows from result dict
+            
+            # If no more rows, break
+            if not rows:
+                break
+            
+            all_rows.extend(rows)
+            page += 1
+
+        return all_rows
+
+    def get_page_count(self, table_name: str, limit: int = 100) -> int:
+        """Get total number of pages for a table.
+
+        Args:
+            table_name: The name of the table to query
+            limit: Number of rows per page (default: 100)
+
+        Returns:
+            Total number of pages
+        """
+        # Get the total count from the API
+        try:
+            # Get the first page and extract the total from headers
+            result = self.api_client(table_name, page=1, limit=limit)
+            total = result.get("total", 0)
+            total_pages = (total + limit - 1) // limit if limit > 0 else 0
+            return total_pages
+        except Exception:
+            return 0
+
+    def get_table_rows_by_page(self, table_name: str, page: int = 1, limit: int = 100) -> Dict[str, Any]:
+        """Get table rows with pagination (alternative method).
+
+        Args:
+            table_name: The name of the table to query
+            page: Page number (1-based)
+            limit: Number of rows per page (default: 100)
+
+        Returns:
+            Dictionary containing rows and pagination metadata
+        """
+        # Call the existing API with pagination parameters
+        result = self.api_client(table_name, page=page, limit=limit)
+        
+        # Return the result with additional metadata if needed
+        return result
+
+    def get_table_rows_with_pagination(self, table_name: str, page: int = 1, limit: int = 100) -> Dict[str, Any]:
+        """Get table rows with pagination and additional metadata.
+
+        Args:
+            table_name: The name of the table to query
+            page: Page number (1-based)
+            limit: Number of rows per page (default: 100)
+
+        Returns:
+            Dictionary containing rows and pagination metadata
+        """
+        # Call the existing API with pagination parameters
+        result = self.api_client(table_name, page=page, limit=limit)
+        
+        # Return the result with additional metadata if needed
+        return result

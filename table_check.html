@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>テーブル要素確認用ページ</title>
+    <style>
+        .table_check {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 20px 0;
+        }
+
+        .table_check th,
+        .table_check td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+
+        .table_check th {
+          background-color: #f2f2f2;
+          font-weight: bold;
+        }
+
+        .hidden-table {
+          display: none;
+        }
+
+        .invisible-table {
+          visibility: hidden;
+        }
+
+        .transparent-table {
+          opacity: 1;
+        }
+
+        /* 新しいスタイル: レース情報テーブル */
+        .race-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 20px 0;
+          font-family: Arial, sans-serif;
+        }
+
+        .race-table th,
+        .race-table td {
+          border: 1px solid #ddd;
+          padding: 12px;
+          text-align: left;
+        }
+
+        .race-table th {
+          background-color: #4CAF50;
+          color: white;
+          font-weight: bold;
+        }
+
+        .race-table tr:nth-child(even) {
+          background-color: #f2f2f2;
+        }
+
+        .race-table tr:hover {
+          background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>テーブル要素確認用ページ</h1>
+    
+    <!-- 表示されるテーブル -->
+    <table border="1">
+        <tr>
+            <th>表示されるテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- CSSで非表示にされたテーブル -->
+    <table class="hidden-table" border="1">
+        <tr>
+            <th>非表示のテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- CSSで非表示にされたテーブル -->
+    <table class="invisible-table" border="1">
+        <tr>
+            <th>非表示のテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- 透明なテーブル -->
+    <table class="transparent-table" border="1">
+        <tr>
+            <th>透明なテーブル</th>
+            <th>テスト</th>
+        </tr>
+        <tr>
+            <td>データ1</td>
+            <td>データ2</td>
+        </tr>
+    </table>
+    
+    <!-- レース情報テーブル (APIからデータを取得して表示) -->
+    <h2>レース情報テーブル</h2>
+    <table id="raceTable" class="race-table">
+        <thead>
+            <tr>
+                <th>レースID</th>
+                <th>場所</th>
+                <th>レース名</th>
+                <th>級別</th>
+                <th>距離</th>
+                <th>馬場状態</th>
+                <th>発走時刻</th>
+            </tr>
+        </thead>
+        <tbody id="raceTableBody">
+            <!-- データはJavaScriptで挿入されます -->
+        </tbody>
+    </table>
+    
+    <script>
+        // データを取得してテーブルに表示するJavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            // APIエンドポイントからデータを取得
+            fetch('/api/db/races')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('raceTableBody');
+                    tableBody.innerHTML = ''; // 既存のデータをクリア
+                    
+                    // データをテーブルに追加
+                    data.forEach(race => {
+                        const row = tableBody.insertRow();
+                        row.insertCell(0).textContent = race.race_id;
+                        row.insertCell(1).textContent = race.place_num;
+                        row.insertCell(2).textContent = race.race_name;
+                        row.insertCell(3).textContent = race.rank;
+                        row.insertCell(4).textContent = race.distance;
+                        row.insertCell(5).textContent = race.condition;
+                        row.insertCell(6).textContent = race.status; // Fixed: was 'staus'
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching race data:', error);
+                    const tableBody = document.getElementById('raceTableBody');
+                    tableBody.innerHTML = '<tr><td colspan="7">データの取得に失敗しました</td></tr>';
+                });
+        });
+    </script>
+</body>
+</html>

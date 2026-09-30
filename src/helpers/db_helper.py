@@ -21,8 +21,10 @@ MYSQL_CONFIG = {
     "user": os.getenv("MYSQL_USER", ""),
     "password": os.getenv("MYSQL_PASSWORD", ""),
     "database": os.getenv("MYSQL_DATABASE", ""),
-    "unix_socket": os.getenv("MYSQL_SOCKET", ""),
 }
+
+if os.getenv("MYSQL_SOCKET"):
+    MYSQL_CONFIG["unix_socket"] = os.getenv("MYSQL_SOCKET")
 
 
 def get_connection() -> mysql.connector.MySQLConnection:

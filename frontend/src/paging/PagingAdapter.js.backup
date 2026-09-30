@@ -1,0 +1,186 @@
+import React from 'react';
+
+/**
+ * ページング用パラメータを管理するクラス
+ */
+class PagingParams {
+  constructor(page = 1, limit = 100) {
+    this.page = page;
+    this.limit = limit;
+    this.offset = (page - 1) * limit;
+  }
+
+  /**
+   * ページ番号を設定
+   * @param {number} page - ページ番号
+   */
+  setPage(page) {
+    this.page = page;
+    this.offset = (page - 1) * this.limit;
+  }
+
+  /**
+   * 件数を設定
+   * @param {number} limit - 1ページあたりの件数
+   */
+  setLimit(limit) {
+    this.limit = limit;
+    this.offset = (this.page - 1) * limit;
+  }
+
+  /**
+   * ページングパラメータをオブジェクトとして取得
+   * @returns {Object} ページングパラメータオブジェクト
+   */
+  toObject() {
+    return {
+      page: this.page,
+      limit: this.limit,
+      offset: this.offset
+    };
+  }
+}
+
+/**
+ * ページング処理を実装するアダプタークラス
+ */
+class PagingAdapter {
+  constructor() {
+    this.params = new PagingParams(1, 100);
+  }
+
+  /**
+   * ページ番号を設定
+   * @param {number} page - ページ番号
+   */
+  setPage(page) {
+    this.params.setPage(page);
+  }
+
+  /**
+   * 件数を設定
+   * @param {number} limit - 1ページあたりの件数
+   */
+  setLimit(limit) {
+    this.params.setLimit(limit);
+  }
+
+  /**
+   * ページングパラメータを取得
+   * @returns {Object} ページングパラメータオブジェクト
+   */
+  getParams() {
+    return this.params.toObject();
+  }
+
+  /**
+   * ページング処理を実行
+   * @param {Function} fetchData - データ取得関数
+   * @param {Object} additionalParams - 追加パラメータ
+   * @returns {Promise<Object>} データ取得結果
+   */
+  async fetchPage(fetchData, additionalParams = {}) {
+    const params = this.getParams();
+    const allParams = { ...params, ...additionalParams };
+    return await fetchData(allParams);
+  }
+
+  /**
+   * ページ数を計算
+   * @param {number} totalRows - 総件数
+   * @returns {number} ページ数
+   */
+  calculateTotalPages(totalRows) {
+    return Math.ceil(totalRows / this.params.limit);
+  }
+
+  /**
+   * 現在のページ番号を取得
+   * @returns {number} 現在のページ番号
+   */
+  getCurrentPage() {
+    return this.params.page;
+  }
+
+  /**
+   * 1ページあたりの件数を取得
+   * @returns {number} 1ページあたりの件数
+   */
+  getLimit() {
+    return this.params.limit;
+  }
+}
+
+/**
+ * API呼び出しをラップするアダプタークラス
+ */
+class ApiPagingAdapter {
+  constructor(apiCallFunction, pageSize = 100) {
+    this.apiCallFunction = apiCallFunction;
+    this.pageSize = pageSize;
+    this.currentPage = 1;
+  }
+
+  /**
+   * ページングデータを取得
+   * @param {number} page - ページ番号
+   * @param {Object} additionalParams - 追加パラメータ
+   * @returns {Promise<Object>} データ取得結果
+   */
+  async getPagedData(page, additionalParams = {}) {
+    const params = {
+      page: page,
+      size: this.pageSize,
+      ...additionalParams
+    };
+    return await this.apiCallFunction(params);
+  }
+
+  /**
+   * 総件数を取得
+   * @returns {Promise<number>} 総件数
+   */
+  async getTotalCount() {
+    const params = {
+      page: 1,
+      size: 1,
+      count: true
+    };
+    const result = await this.apiCallFunction(params);
+    return result.totalCount || result.count || 0;
+  }
+
+  /**
+   * 現在のページ番号を取得
+   * @returns {number} 現在のページ番号
+   */
+  getCurrentPage() {
+    return this.currentPage;
+  }
+
+  /**
+   * ページ番号を設定
+   * @param {number} page - ページ番号
+   */
+  setCurrentPage(page) {
+    this.currentPage = page;
+  }
+
+  /**
+   * ページサイズを取得
+   * @returns {number} ページサイズ
+   */
+  getPageSize() {
+    return this.pageSize;
+  }
+
+  /**
+   * ページサイズを設定
+   * @param {number} pageSize - ページサイズ
+   */
+  setPageSize(pageSize) {
+    this.pageSize = pageSize;
+  }
+}
+
+export { PagingParams, PagingAdapter, ApiPagingAdapter };

@@ -204,7 +204,7 @@ const TableView = ({
         ))}
       </div>
       
-      <div className="table-container" style={{ height: tableHeight, overflow: "auto" }} ref={tableRef}>
+      <div className="table-container">
         {loading ? (
           <div className="loading">データを取得中...</div>
         ) : error ? (
@@ -270,9 +270,7 @@ const HomePage = () => {
   console.log('HomePage component rendering, activeSection:', activeSection);
 
   // APIからデータを取得
-  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 1000000) => {
-    console.log(`Fetching data for table: ${tableName}, page: ${page}, limit: ${limit}`);
-    
+  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 100) => {
     setLoading(true);
     setError(null);
     setActiveTable(tableName);
@@ -320,18 +318,6 @@ const HomePage = () => {
 
   // 初期ロード
   useEffect(() => {
-    const handleResize = () => {
-      const windowHeight = window.innerHeight;
-      const headerHeight = 100; // ヘッダーの高さ
-      const controlsHeight = 100; // コントロールの高さ
-      const tableHeight = windowHeight - headerHeight - controlsHeight - 50;
-      setTableHeight(`${tableHeight}px`);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
     fetchTableData();
   }, []);
   
@@ -339,7 +325,7 @@ const HomePage = () => {
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
-      fetchTableData(activeTable, newPage, 10000);
+      fetchTableData(activeTable, newPage, 100);
     }
   };
 
@@ -603,7 +589,7 @@ const TableView = ({
     }
 
     return (
-      <div className="table-container" style={{ height: tableHeight, overflow: "auto" }} ref={tableRef}>
+      <div className="table-container">
         <table className="data-table">
           <thead>
             <tr>
@@ -706,15 +692,13 @@ const HomePage = () => {
   console.log('HomePage component rendering, activeSection:', activeSection);
 
   // APIからデータを取得
-  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 10000) => {
+  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 100) => {
     setLoading(true);
     setError(null);
     setActiveTable(tableName);
-      const response = await fetch(`/api/db/${tableName}?page=${page}&limit=${limit}`);
-      console.log('Response status:', response.status);
     
     try {
-page=${page}&limit=${limit}
+      const response = await fetch(`/api/db/${tableName}?page=${page}&limit=${limit}`);
       console.log('Response status:', response.status);
       
       if (!response.ok) {
@@ -787,18 +771,6 @@ page=${page}&limit=${limit}
 
   // 初期ロード
   useEffect(() => {
-    const handleResize = () => {
-      const windowHeight = window.innerHeight;
-      const headerHeight = 100; // ヘッダーの高さ
-      const controlsHeight = 100; // コントロールの高さ
-      const tableHeight = windowHeight - headerHeight - controlsHeight - 50;
-      setTableHeight(`${tableHeight}px`);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
     fetchTableData();
   }, []);
   
@@ -806,7 +778,7 @@ page=${page}&limit=${limit}
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
-      fetchTableData(activeTable, newPage, 10000);
+      fetchTableData(activeTable, newPage, 100);
     }
   };
 
@@ -1038,24 +1010,12 @@ const TableView = ({
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       pagingAdapter.setPage(newPage);
-      fetchTableData(activeTable, newPage, 10000);
+      fetchTableData(activeTable, newPage, 100);
     }
   };
   
   // 無限スクロール用の処理
   useEffect(() => {
-    const handleResize = () => {
-      const windowHeight = window.innerHeight;
-      const headerHeight = 100; // ヘッダーの高さ
-      const controlsHeight = 100; // コントロールの高さ
-      const tableHeight = windowHeight - headerHeight - controlsHeight - 50;
-      setTableHeight(`${tableHeight}px`);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
     if (loading || isScrollLoading || !totalPages) return;
     
     const observer = new IntersectionObserver(
@@ -1153,7 +1113,7 @@ const HomePage = () => {
   };
 
   // APIからデータを取得
-  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 1000000) => {
+  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 100) => {
     // ページングパラメータを取得
     pagingAdapter.setPage(page);
     pagingAdapter.setLimit(limit);
@@ -1169,9 +1129,8 @@ const HomePage = () => {
     try {
       // ページングパラメータを取得
       const pagingParams = pagingAdapter.getParams();
-      const url = `${API_BASE_URL}/api/${tableName}/data?page=${page}&limit=${limit}`;
       
-page=${page}&limit=${limit}
+      const response = await fetch(`/api/db/${tableName}?page=${page}&limit=${limit}`);
       console.log('Response status:', response.status);
       
       if (!response.ok) {
@@ -1213,25 +1172,13 @@ page=${page}&limit=${limit}
 
   // 初期ロード
   React.useEffect(() => {
-    const handleResize = () => {
-      const windowHeight = window.innerHeight;
-      const headerHeight = 100; // ヘッダーの高さ
-      const controlsHeight = 100; // コントロールの高さ
-      const tableHeight = windowHeight - headerHeight - controlsHeight - 50;
-      setTableHeight(`${tableHeight}px`);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
     fetchTableData();
   }, []);
   
   // Handle page change
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
+      setPage(newPage);
       fetchTableData(activeTable, newPage, 100);
     }
   };

@@ -1,4 +1,4 @@
-"""FastAPI server implementation for the keiba data API."""
+"""FastAPI server for the database UI and existing collection workflows."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Header, Query
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -53,38 +53,22 @@ def _json_value(value: Any) -> Any:
 
 
 @app.get("/api/db/{table_name}")
-def get_table_rows(table_name: str, page: int = 1, limit: int = Query(1000000)) -> Response:
-    """Return rows for one of the tables used by the existing UI."""
-    if table_name not in TABLES:
-        raise HTTPException(status_code=404, detail="Unknown table")
-
-    connection = get_connection()
+def get_table_data(table_name: str) -> list[dict[str, Any]]:
     try:
+        connection = get_connection()
         cursor = connection.cursor(dictionary=True)
-        # Get total count for pagination
-        cursor.execute(f"SELECT COUNT(*) as total FROM `{table_name}`")
-        total_count = cursor.fetchone()['total']
-
-        # Apply pagination to the query
-        offset = (page - 1) * limit
-        cursor.execute(f"SELECT * FROM `{table_name}` LIMIT %s OFFSET %s", (limit, offset))
-        result = [
-            {key: _json_value(value) for key, value in row.items()}
-            for row in cursor.fetchall()
-        ]
-
-        # Create a JSON string response
-        import json
-        json_content = json.dumps(result)
-
-        # Create a custom response to include the total count in headers
-        response = Response(content=json_content)
-        response.headers["X-Total-Rows"] = str(total_count)
-        return response
+        cursor.execute(f"SELECT * FROM {table_name}")
+        rows = cursor.fetchall()
+        
+        # Convert values to JSON-serializable format
+        serialized_rows = [_json_value(row) for row in rows]
+        
+        return serialized_rows
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
-        connection.close()
+        if connection and connection.is_connected():
+            connection.close()
 
 
 @app.post("/api/jra/fetch-race-days")

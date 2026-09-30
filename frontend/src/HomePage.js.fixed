@@ -270,15 +270,13 @@ const HomePage = () => {
   console.log('HomePage component rendering, activeSection:', activeSection);
 
   // APIからデータを取得
-  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 1000000) => {
-    console.log(`Fetching data for table: ${tableName}, page: ${page}, limit: ${limit}`);
-    
+  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = 10000) => {
     setLoading(true);
     setError(null);
     setActiveTable(tableName);
     
     try {
-      const response = await fetch(`/api/db/${tableName}?page=${page}&limit=${limit}`);
+page=${page}&limit=${limit}
       console.log('Response status:', response.status);
       
       if (!response.ok) {
@@ -710,8 +708,6 @@ const HomePage = () => {
     setLoading(true);
     setError(null);
     setActiveTable(tableName);
-      const response = await fetch(`/api/db/${tableName}?page=${page}&limit=${limit}`);
-      console.log('Response status:', response.status);
     
     try {
 page=${page}&limit=${limit}
@@ -1231,8 +1227,8 @@ page=${page}&limit=${limit}
   // Handle page change
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      fetchTableData(activeTable, newPage, 100);
+      setPage(newPage);
+      fetchTableData(activeTable, newPage, 10000);
     }
   };
 
