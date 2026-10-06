@@ -2,6 +2,7 @@
 Unit tests for pagination functionality.
 """
 import unittest
+import json
 from unittest.mock import patch, MagicMock
 import requests
 
@@ -160,6 +161,103 @@ class TestPagination(unittest.TestCase):
             # but a test environment issue
             print(f"Cannot test table display functionality due to connection issue: {e}")
             pass
+
+
+class TestTableDataQuery(unittest.TestCase):
+    def test_search_sort_and_pagination_are_applied_to_the_full_table(self):
+        from src.backend.server import get_table_rows
+
+        cursor = MagicMock()
+        cursor.fetchall.side_effect = [
+            [
+                {"Field": "id", "Key": "PRI"},
+                {"Field": "name", "Key": ""},
+            ],
+            [{"id": 1, "name": "Alpha"}],
+        ]
+        cursor.fetchone.return_value = {"total": 7}
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("src.backend.server.get_connection", return_value=connection):
+            response = get_table_rows(
+                "races", page=2, limit=2, search="alpha", sort_by="name", sort_order="desc"
+            )
+
+        self.assertEqual(response.headers["X-Total-Rows"], "7")
+        self.assertEqual(json.loads(response.body), [{"id": 1, "name": "Alpha"}])
+        count_query, count_params = cursor.execute.call_args_list[1].args
+        page_query, page_params = cursor.execute.call_args_list[2].args
+        self.assertIn("LOCATE(%s, CAST(`id` AS CHAR))", count_query)
+        self.assertEqual(count_params, ("alpha", "alpha"))
+        self.assertIn("ORDER BY `name` DESC, `id` ASC", page_query)
+        self.assertEqual(page_params, ("alpha", "alpha", 2, 2))
+
+    def test_unknown_sort_column_is_rejected(self):
+        from fastapi import HTTPException
+        from src.backend.server import get_table_rows
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [{"Field": "id", "Key": "PRI"}]
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with patch("src.backend.server.get_connection", return_value=connection):
+            with self.assertRaises(HTTPException) as error:
+                get_table_rows("races", sort_by="id; DROP TABLE races")
+
+        self.assertEqual(error.exception.status_code, 400)
+
+    def test_race_card_urls_are_built_from_race_ids(self):
+        from datetime import date
+        from src.backend.server import get_netkeiba_race_card_urls
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [{
+            "race_id": "202610010101",
+            "html_fetched": 1,
+            "parsed": 1,
+            "registered": 1,
+            "error_message": None,
+        }]
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with (
+            patch("src.backend.server.get_race_ids_by_date", return_value=["202610010101"]),
+            patch("src.backend.server.get_connection", return_value=connection),
+        ):
+            result = get_netkeiba_race_card_urls(date(2026, 10, 1))
+
+        self.assertEqual(result["race_date"], "2026-10-01")
+        self.assertEqual(result["race_cards"], [{
+            "race_id": "202610010101",
+            "url": "https://race.netkeiba.com/race/shutuba.html?race_id=202610010101",
+            "fetch_status": {
+                "html_fetched": True,
+                "parsed": True,
+                "registered": True,
+                "error_message": None,
+            },
+        }])
+
+    def test_race_card_urls_return_null_status_for_unfetched_races(self):
+        from datetime import date
+        from src.backend.server import get_netkeiba_race_card_urls
+
+        cursor = MagicMock()
+        cursor.fetchall.return_value = []
+        connection = MagicMock()
+        connection.cursor.return_value = cursor
+
+        with (
+            patch("src.backend.server.get_race_ids_by_date", return_value=["202610010101"]),
+            patch("src.backend.server.get_connection", return_value=connection),
+        ):
+            result = get_netkeiba_race_card_urls(date(2026, 10, 1))
+
+        self.assertIsNone(result["race_cards"][0]["fetch_status"])
+        connection.close.assert_called_once_with()
             
     def test_table_display_with_invalid_table(self):
         """Test that table display correctly handles invalid table names."""

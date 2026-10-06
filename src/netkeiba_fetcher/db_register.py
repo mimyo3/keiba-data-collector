@@ -14,6 +14,7 @@ from src.netkeiba_fetcher.db_schema import (
     RACES_TABLE_SQL,
     HORSE_RACE_RESULTS_TABLE_SQL,
     RACE_FETCH_STATUS_TABLE_SQL,
+    RACE_CARD_ENTRIES_TABLE_SQL,
 )
 
 from src.helpers.db_helper import get_connection
@@ -25,6 +26,7 @@ __all__ = [
     "register_races",
     "register_html_saves",
     "register_race_fetch_status",
+    "register_race_card_entries",
     "update_race_fetch_status",
 ]
 
@@ -43,12 +45,88 @@ def init_db(conn: Any = None) -> None:
     cur.execute(RACES_TABLE_SQL)
     cur.execute(HORSE_RACE_RESULTS_TABLE_SQL)
     cur.execute(RACE_FETCH_STATUS_TABLE_SQL)
+    cur.execute(RACE_CARD_ENTRIES_TABLE_SQL)
 
     conn.commit()
     cur.close()
 
     if close_after:
         conn.close()
+
+
+def register_race_card_entries(entries: List[Dict[str, Any]]) -> int:
+    """Insert or update the declared horses for one race."""
+    if not entries:
+        raise ValueError("出馬表から登録対象の馬が見つかりません")
+
+    race_ids = {entry["race_id"] for entry in entries}
+    if len(race_ids) != 1:
+        raise ValueError("一度に登録できる出馬表は1レース分です")
+    race_id = race_ids.pop()
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "DELETE FROM race_card_entries WHERE race_id = %s",
+            (race_id,),
+        )
+        cur.executemany(
+            """
+            INSERT INTO race_card_entries (
+                race_id,
+                race_date,
+                frame_number,
+                horse_number,
+                horse_id,
+                horse_name,
+                sex_age,
+                carried_weight,
+                jockey,
+                trainer_area,
+                trainer,
+                horse_weight,
+                weight_change,
+                win_odds,
+                popularity
+            )
+            VALUES (
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s
+            )
+            """,
+            [
+                (
+                    entry["race_id"],
+                    entry["race_date"],
+                    entry["frame_number"],
+                    entry["horse_number"],
+                    entry["horse_id"],
+                    entry["horse_name"],
+                    entry["sex_age"],
+                    entry["carried_weight"],
+                    entry["jockey"],
+                    entry["trainer_area"],
+                    entry["trainer"],
+                    entry["horse_weight"],
+                    entry["weight_change"],
+                    entry["win_odds"],
+                    entry["popularity"],
+                )
+                for entry in entries
+            ],
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+    print(f"Registered {len(entries)} race-card entries.")
+    return len(entries)
 
 
 def register_kaishi_dates(dates: Iterable[str]) -> None:

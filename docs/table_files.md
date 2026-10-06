@@ -12,8 +12,10 @@
 - jra_html_metadata
 - race_days
 - race_fetch_status
+- race_card_entries
 - races
 
 ## APIエンドポイント
 
 - `/api/db/{table_name}` - 指定テーブルのデータを取得
+- `/api/netkeiba/race-card/{race_id}` - 出馬表と、馬IDに紐づく開催日順の過去成績を取得

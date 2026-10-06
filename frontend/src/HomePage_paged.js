@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './HomePage.css';
 
 const PAGE_SIZE = 100;
 
 // データ登録コンポーネント
-const DataRegistrationSection = () => {
+const DataRegistrationSection = ({ onFetchRaceCardUrls }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [isFetching, setIsFetching] = useState(false);
@@ -123,6 +123,9 @@ const DataRegistrationSection = () => {
     <div className="data-registration-section">
       <h2>データ登録</h2>
       <div className="registration-buttons">
+        <button className="register-button" onClick={onFetchRaceCardUrls}>
+          当日出馬表URL取得
+        </button>
         <button 
           className="register-button" 
           onClick={handleJraFetch}
@@ -161,11 +164,227 @@ const DataRegistrationSection = () => {
   );
 };
 
+const RaceCardUrlView = ({
+  raceDate,
+  raceCards,
+  loading,
+  error,
+  fetchStatuses,
+  onFetchPreviousRuns,
+  onShowRaceCard,
+  onBack,
+}) => (
+  <section className="race-card-url-view">
+    <div className="race-card-url-heading">
+      <h2>当日出馬表URL</h2>
+      <button className="table-button" onClick={onBack}>データ登録へ戻る</button>
+    </div>
+    {raceDate && <p>{raceDate} のレース: {raceCards.length} 件</p>}
+    <div className="table-container" aria-label="当日出馬表URL一覧">
+      {loading ? (
+        <p>出馬表URLを取得中...</p>
+      ) : error ? (
+        <p className="error">出馬表URLを取得できませんでした: {error}</p>
+      ) : raceCards.length === 0 ? (
+        <p className="no-data">当日の出馬表URLはありません</p>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>レースID</th>
+              <th>出馬表URL</th>
+              <th>出馬表表示</th>
+              <th>前走記録取得</th>
+            </tr>
+          </thead>
+          <tbody>
+            {raceCards.map((race) => (
+              <tr key={race.race_id}>
+                <td>{race.race_id}</td>
+                <td>
+                  <a
+                    href={race.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => onFetchPreviousRuns(race.race_id)}
+                  >
+                    {race.url}
+                  </a>
+                </td>
+                <td>
+                  <button
+                    className="table-button"
+                    onClick={() => onShowRaceCard(race)}
+                  >
+                    表示
+                  </button>
+                </td>
+                <td aria-live="polite">
+                  {fetchStatuses[race.race_id]?.message
+                    || (race.fetch_status?.registered
+                      ? '取得済み'
+                      : race.fetch_status?.error_message
+                        ? `取得失敗: ${race.fetch_status.error_message}`
+                        : race.fetch_status
+                          ? '未完了'
+                          : '未取得')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  </section>
+);
+
+const RaceCardEntryView = ({
+  raceDate,
+  raceId,
+  entries,
+  loading,
+  error,
+  onBack,
+}) => (
+  <section className="race-card-url-view">
+    <div className="race-card-url-heading">
+      <h2>当日出馬表: {raceId}</h2>
+      <button className="table-button" onClick={onBack}>
+        当日出馬表URLへ戻る
+      </button>
+    </div>
+    {!loading && !error && entries.length > 0 && (
+      <p>{raceDate}・{entries.length}頭</p>
+    )}
+    <div className="table-container" aria-label="レース出馬表">
+      {loading ? (
+        <p role="status">登録済みの出馬表を読み込み中...</p>
+      ) : error ? (
+        <p className="error">出馬表を取得できませんでした: {error}</p>
+      ) : entries.length === 0 ? (
+        <p className="no-data">
+          このレースの出馬表はまだ登録されていません。URLをクリックして取得してください。
+        </p>
+      ) : (
+        <div className="race-card-newspaper">
+          {entries.map((entry) => {
+            const previousRuns = entry.previous_runs || [];
+            return (
+              <article
+                className="race-card-horse-row"
+                key={`${entry.race_id}-${entry.horse_number}`}
+              >
+                <section className="race-card-horse-summary" aria-label="出走馬情報">
+                  <div className="race-card-horse-number">
+                    <span>{entry.frame_number ?? '-'}枠</span>
+                    <strong>{entry.horse_number}</strong>
+                  </div>
+                  <div>
+                    <h3>{entry.horse_name}</h3>
+                    <p>{entry.sex_age || '-'}・{entry.carried_weight ?? '-'}kg</p>
+                    <p>{entry.jockey || '-'} / {[entry.trainer_area, entry.trainer].filter(Boolean).join(' ') || '-'}</p>
+                    <p>
+                      馬体重 {entry.horse_weight ?? '-'}
+                      {entry.weight_change == null ? '' : ` (${entry.weight_change > 0 ? '+' : ''}${entry.weight_change})`}
+                      ・単勝 {entry.win_odds ?? '-'} ・{entry.popularity ?? '-'}人気
+                    </p>
+                  </div>
+                </section>
+                <section className="race-card-previous-runs" aria-label={`${entry.horse_name}の過去成績`}>
+                  {previousRuns.length === 0 ? (
+                    <p className="race-card-no-history">登録済みの過去成績はありません</p>
+                  ) : previousRuns.map((run, index) => (
+                    <article
+                      className="race-card-previous-run"
+                      key={`${run.race_id}-${index}`}
+                    >
+                      <h4>{index === 0 ? '前走' : `${index + 1}走前`}</h4>
+                      <p className="race-card-run-title">
+                        {[
+                          run.race_date || '開催日不明',
+                          run.place_num,
+                          run.race_id && /^\d{12}$/.test(run.race_id)
+                            ? `${run.race_id.slice(-2)}R`
+                            : null,
+                          run.grade,
+                        ].filter(Boolean).join(' ')}
+                      </p>
+                      <p className="race-card-run-race-name">
+                        {run.race_name || '-'}
+                        {run.race_condition ? `・${run.race_condition}` : ''}
+                        {run.tousu == null ? '' : `・${run.tousu}頭`}
+                        {run.post == null ? '' : `・${run.post}番`}
+                        {run.popularity == null ? '' : `・${run.popularity}人気`}
+                      </p>
+                      <p className="race-card-run-track">
+                        {[run.track, run.distance && `${run.distance}m`, run.condition, run.bias]
+                          .filter(Boolean).join('・') || '-'}
+                      </p>
+                      <p className="race-card-run-result">
+                        {run.tyakujun == null ? '-' : `${run.tyakujun}着`}
+                        {run.time ? `・${run.time}` : ''}
+                        {run.margin ? `・着差 ${run.margin}` : ''}
+                        {run.pace ? `・${run.pace}` : ''}
+                        {(run.staus || run.develop_type) ? `・${run.staus || run.develop_type}` : ''}
+                      </p>
+                      <p>
+                        {run.jockey || '-'}
+                        {run.weight == null ? '' : `・${run.weight}kg`}
+                        {run.horse_weight == null ? '' : `・馬体重${run.horse_weight}kg`}
+                        {run.weight_change == null ? '' : ` (${run.weight_change > 0 ? '+' : ''}${run.weight_change})`}
+                      </p>
+                      <p>
+                        {run.first_half == null ? '' : `前半3F ${run.first_half}`}
+                        {run.corners ? `・通過 ${run.corners}` : ''}
+                        {run.huri1 ? ` (${run.huri1})` : ''}
+                        {run.corner4 ? `・4角 ${run.corner4}` : ''}
+                        {run.corner_position ? `・走行位置 ${run.corner_position}` : ''}
+                        {run.second_half == null ? '' : `・後半3F ${run.second_half}`}
+                      </p>
+                      {(run.ichinuke != null || run.jitenn != null) && (
+                        <p>
+                          {run.ichinuke == null ? '' : `勝ち上がり ${run.ichinuke}頭`}
+                          {run.jitenn == null ? '' : `・3着以内 ${run.jitenn}頭`}
+                        </p>
+                      )}
+                      {(run.time_index_total != null || run.time_index_start != null
+                        || run.time_index_run != null || run.time_index_finish != null) && (
+                        <p>
+                          指数 {[
+                            run.time_index_total,
+                            run.time_index_start,
+                            run.time_index_run,
+                            run.time_index_finish,
+                          ].map((value) => value == null ? '-' : value).join(' / ')}
+                        </p>
+                      )}
+                      {(run.running_type || run.ana04) && (
+                        <p>
+                          {run.running_type ? `ラップタイプ ${run.running_type}` : ''}
+                          {run.running_type && run.ana04 ? '・' : ''}
+                          {run.ana04 ? `不利 ${run.ana04}` : ''}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </section>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  </section>
+);
+
 // テーブル表示コンポーネント
-const TableView = ({ activeTable, data, columns, loading, error, isScrollLoading, fetchTableData, currentPage, totalPages, totalRows, onPageChange, onLoadMore }) => {
+const TableView = ({ activeTable, data, columns, loading, error, isScrollLoading, currentPage, totalPages, totalRows, onPageChange, onLoadMore, searchQuery, sortConfig, onSearchChange, onSortChange, onTableChange }) => {
   const tableContainerRef = useRef(null);
+  const searchTimerRef = useRef(null);
+  const [searchInput, setSearchInput] = useState(searchQuery);
   const tableList = [
     { name: 'horse_race_results', label: '馬場成績' },
+    { name: 'race_card_entries', label: '当日出馬表' },
     { name: 'html_saves', label: 'HTML保存' },
     { name: 'jra_html_metadata', label: 'JRA HTMLメタデータ' },
     { name: 'race_days', label: '開催日' },
@@ -180,6 +399,25 @@ const TableView = ({ activeTable, data, columns, loading, error, isScrollLoading
     }
   };
 
+  const handleTableChange = (tableName) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    setSearchInput('');
+    onTableChange(tableName);
+  };
+
+  const handleSearchInput = (value) => {
+    setSearchInput(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => onSearchChange(value), 300);
+  };
+
+  useEffect(() => () => clearTimeout(searchTimerRef.current), []);
+
+  const handleSort = (key) => {
+    const direction = sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    onSortChange(key, direction);
+  };
+
   return (
     <div className="table-view">
       <h2>{activeTable} テーブル</h2>
@@ -188,11 +426,24 @@ const TableView = ({ activeTable, data, columns, loading, error, isScrollLoading
           <button
             key={table.name}
             className={`table-button ${activeTable === table.name ? 'active' : ''}`}
-            onClick={() => fetchTableData(table.name, 1, PAGE_SIZE)}
+            onClick={() => handleTableChange(table.name)}
           >
             {table.label}
           </button>
         ))}
+      </div>
+      <div className="table-search-controls">
+        <label htmlFor="table-search">テーブル内を検索</label>
+        <input
+          id="table-search"
+          type="search"
+          value={searchInput}
+          onChange={(event) => handleSearchInput(event.target.value)}
+          placeholder="テーブル全体から検索"
+        />
+        <span className="table-result-count" aria-live="polite">
+          {totalRows} 件検索結果 / {data.length} 件表示中
+        </span>
       </div>
       <div className="table-container" ref={tableContainerRef} onScroll={handleScroll} aria-label="テーブルデータ">
         {loading ? (
@@ -200,13 +451,17 @@ const TableView = ({ activeTable, data, columns, loading, error, isScrollLoading
         ) : error && data.length === 0 ? (
           <p className="error">{error}</p>
         ) : data.length === 0 ? (
-          <p className="no-data">データがありません</p>
+          <p className={searchQuery ? 'no-matches' : 'no-data'}>{searchQuery ? '検索結果がありません' : 'データがありません'}</p>
         ) : (
           <table className="data-table">
             <thead>
               <tr>
                 {columns.map((column) => (
-                  <th key={column.key}>{column.header}</th>
+                  <th key={column.key} aria-sort={sortConfig.key === column.key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button className="table-sort-button" onClick={() => handleSort(column.key)} aria-label={`${column.header}でソート`}>
+                      {column.header}{sortConfig.key === column.key ? (sortConfig.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                    </button>
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -242,9 +497,20 @@ const TableView = ({ activeTable, data, columns, loading, error, isScrollLoading
 // メインのホームページコンポーネント
 const HomePage = () => {
   const [activeSection, setActiveSection] = useState('data-registration');
+  const [raceDate, setRaceDate] = useState('');
+  const [raceCards, setRaceCards] = useState([]);
+  const [raceCardLoading, setRaceCardLoading] = useState(false);
+  const [raceCardError, setRaceCardError] = useState('');
+  const [raceFetchStatuses, setRaceFetchStatuses] = useState({});
+  const [selectedRaceCard, setSelectedRaceCard] = useState(null);
+  const [raceCardEntries, setRaceCardEntries] = useState([]);
+  const [raceCardEntriesLoading, setRaceCardEntriesLoading] = useState(false);
+  const [raceCardEntriesError, setRaceCardEntriesError] = useState('');
   const [activeTable, setActiveTable] = useState('horse_race_results');
   const [columns, setColumns] = useState([]);
   const [data, setData] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
@@ -252,11 +518,102 @@ const HomePage = () => {
   const [error, setError] = useState(null);
   const [isScrollLoading, setIsScrollLoading] = useState(false);
   const loadMoreInProgress = useRef(false);
+  const raceFetchInProgress = useRef(new Set());
+
+  const fetchPreviousRuns = async (raceId) => {
+    if (raceFetchInProgress.current.has(raceId)) return;
+
+    raceFetchInProgress.current.add(raceId);
+    setRaceFetchStatuses((statuses) => ({
+      ...statuses,
+      [raceId]: { message: '前走記録を取得・登録中...' },
+    }));
+
+    try {
+      const response = await fetch(`/api/netkeiba/fetch-race-data/${raceId}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      const result = await response.json();
+      setRaceFetchStatuses((statuses) => ({
+        ...statuses,
+        [raceId]: { message: result.message },
+      }));
+    } catch (err) {
+      console.error(`race_id ${raceId} の前走記録取得に失敗しました:`, err);
+      setRaceFetchStatuses((statuses) => ({
+        ...statuses,
+        [raceId]: { message: `取得失敗: ${err.message}` },
+      }));
+    } finally {
+      raceFetchInProgress.current.delete(raceId);
+    }
+  };
+
+  const fetchRaceCardUrls = async () => {
+    setActiveSection('race-card-urls');
+    setRaceCardLoading(true);
+    setRaceCardError('');
+    try {
+      const response = await fetch('/api/netkeiba/race-card-urls');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      const result = await response.json();
+      setRaceDate(result.race_date);
+      setRaceCards(result.race_cards);
+      setRaceFetchStatuses(
+        Object.fromEntries(
+          result.race_cards.map((race) => {
+            const status = race.fetch_status;
+            const message = status?.registered
+              ? '取得済み'
+              : status?.error_message
+                ? `取得失敗: ${status.error_message}`
+                : status
+                  ? '未完了'
+                  : '未取得';
+            return [race.race_id, { message }];
+          }),
+        ),
+      );
+    } catch (err) {
+      setRaceCardError(err.message);
+      setRaceCards([]);
+    } finally {
+      setRaceCardLoading(false);
+    }
+  };
+
+  const showRaceCard = async (race) => {
+    setSelectedRaceCard(race);
+    setActiveSection('race-card-view');
+    setRaceCardEntries([]);
+    setRaceCardEntriesLoading(true);
+    setRaceCardEntriesError('');
+
+    try {
+      const response = await fetch(
+        `/api/netkeiba/race-card/${race.race_id}`,
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+      const result = await response.json();
+      setRaceCardEntries(result.entries);
+    } catch (err) {
+      setRaceCardEntriesError(err.message);
+    } finally {
+      setRaceCardEntriesLoading(false);
+    }
+  };
   
   console.log('HomePage component rendering, activeSection:', activeSection);
 
   // APIからデータを取得
-  const fetchTableData = async (tableName = 'horse_race_results', page = 1, limit = PAGE_SIZE) => {
+  const fetchTableData = useCallback(async (tableName = 'horse_race_results', page = 1, limit = PAGE_SIZE, search = '', sortBy = null, sortOrder = 'asc') => {
     try {
       setLoading(true);
       setError(null);
@@ -264,7 +621,13 @@ const HomePage = () => {
       setCurrentPage(page);
       
       try {
-        const response = await fetch(`/api/db/${tableName}?page=${page}&limit=${limit}`);
+        const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+        if (search) query.set('search', search);
+        if (sortBy) {
+          query.set('sort_by', sortBy);
+          query.set('sort_order', sortOrder);
+        }
+        const response = await fetch(`/api/db/${tableName}?${query.toString()}`);
         console.log('Response status:', response.status);
         
         if (!response.ok) {
@@ -278,7 +641,7 @@ const HomePage = () => {
         
         const rowCount = Number(response.headers.get('x-total-rows') || 0);
         setTotalRows(rowCount);
-        setTotalPages(Math.ceil(rowCount / limit));
+        setTotalPages(Math.max(1, Math.ceil(rowCount / limit)));
         
         // APIから返されたキーを列名として使用
         if (jsonData.length > 0) {
@@ -307,7 +670,7 @@ const HomePage = () => {
       setColumns([]);
       setData([]);
     }
-  };
+  }, []);
 
   const loadMoreData = async () => {
     if (loadMoreInProgress.current || loading || currentPage >= totalPages) return;
@@ -315,7 +678,13 @@ const HomePage = () => {
     setIsScrollLoading(true);
     const nextPage = currentPage + 1;
     try {
-      const response = await fetch(`/api/db/${activeTable}?page=${nextPage}&limit=${PAGE_SIZE}`);
+      const query = new URLSearchParams({ page: String(nextPage), limit: String(PAGE_SIZE) });
+      if (searchQuery) query.set('search', searchQuery);
+      if (sortConfig.key) {
+        query.set('sort_by', sortConfig.key);
+        query.set('sort_order', sortConfig.direction);
+      }
+      const response = await fetch(`/api/db/${activeTable}?${query.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}. ${await response.text()}`);
       }
@@ -333,14 +702,30 @@ const HomePage = () => {
   // 初期ロード
   useEffect(() => {
     fetchTableData('horse_race_results', 1, PAGE_SIZE);
-  }, []);
+  }, [fetchTableData]);
   
   // Handle page change
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(parseInt(newPage));
-      fetchTableData(activeTable, parseInt(newPage), PAGE_SIZE);
+      fetchTableData(activeTable, parseInt(newPage), PAGE_SIZE, searchQuery, sortConfig.key, sortConfig.direction);
     }
+  };
+
+  const handleSearchChange = (newSearch, tableName = activeTable) => {
+    setSearchQuery(newSearch);
+    fetchTableData(tableName, 1, PAGE_SIZE, newSearch, sortConfig.key, sortConfig.direction);
+  };
+
+  const handleSortChange = (key, direction, tableName = activeTable) => {
+    setSortConfig({ key, direction });
+    fetchTableData(tableName, 1, PAGE_SIZE, searchQuery, key, direction);
+  };
+
+  const handleTableChange = (tableName) => {
+    setSearchQuery('');
+    setSortConfig({ key: null, direction: 'asc' });
+    fetchTableData(tableName, 1, PAGE_SIZE, '', null, 'asc');
   };
 
   return (
@@ -369,7 +754,27 @@ const HomePage = () => {
       
       <main className="home-main">
         {activeSection === 'data-registration' ? (
-          <DataRegistrationSection />
+          <DataRegistrationSection onFetchRaceCardUrls={fetchRaceCardUrls} />
+        ) : activeSection === 'race-card-urls' ? (
+          <RaceCardUrlView
+            raceDate={raceDate}
+            raceCards={raceCards}
+            loading={raceCardLoading}
+            error={raceCardError}
+            fetchStatuses={raceFetchStatuses}
+            onFetchPreviousRuns={fetchPreviousRuns}
+            onShowRaceCard={showRaceCard}
+            onBack={() => setActiveSection('data-registration')}
+          />
+        ) : activeSection === 'race-card-view' ? (
+          <RaceCardEntryView
+            raceDate={raceCardEntries[0]?.race_date || raceDate}
+            raceId={selectedRaceCard?.race_id || ''}
+            entries={raceCardEntries}
+            loading={raceCardEntriesLoading}
+            error={raceCardEntriesError}
+            onBack={() => setActiveSection('race-card-urls')}
+          />
         ) : (
           <TableView 
             activeTable={activeTable}
@@ -378,12 +783,16 @@ const HomePage = () => {
             loading={loading}
             error={error}
             isScrollLoading={isScrollLoading}
-            fetchTableData={fetchTableData}
             currentPage={currentPage}
             totalPages={totalPages}
             totalRows={totalRows}
             onPageChange={handlePageChange}
             onLoadMore={loadMoreData}
+            searchQuery={searchQuery}
+            sortConfig={sortConfig}
+            onSearchChange={handleSearchChange}
+            onSortChange={handleSortChange}
+            onTableChange={handleTableChange}
           />
         )}
       </main>

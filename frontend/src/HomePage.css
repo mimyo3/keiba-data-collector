@@ -138,11 +138,172 @@
   color: #333;
 }
 
+.race-card-url-view {
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.race-card-url-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.race-card-url-heading h2 {
+  margin: 0;
+  color: #333;
+}
+
+.race-card-url-view td a {
+  overflow-wrap: anywhere;
+}
+
+.race-card-newspaper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 860px;
+}
+
+.race-card-horse-row {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 170px;
+  border: 1px solid #c9d1d9;
+  background: #fff;
+}
+
+.race-card-horse-summary {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-right: 1px solid #c9d1d9;
+  background: #f5f7f9;
+}
+
+.race-card-horse-summary h3,
+.race-card-horse-summary p,
+.race-card-previous-run p {
+  margin: 0 0 6px;
+}
+
+.race-card-horse-summary h3 {
+  color: #135b8a;
+  font-size: 16px;
+}
+
+.race-card-horse-summary p,
+.race-card-previous-run p {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.race-card-horse-number {
+  display: flex;
+  flex: 0 0 42px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.race-card-horse-number span {
+  color: #59636e;
+  font-size: 11px;
+}
+
+.race-card-horse-number strong {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #adb5bd;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.race-card-previous-runs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px;
+}
+
+.race-card-previous-run {
+  flex: 0 0 240px;
+  padding: 8px 10px;
+  border: 1px solid #d9e0e6;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.race-card-previous-run h4 {
+  margin: 0 0 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  background: #536b7a;
+}
+
+.race-card-previous-run .race-card-run-title {
+  min-height: 36px;
+  color: #145b87;
+  font-weight: 600;
+}
+
+.race-card-previous-run .race-card-run-result {
+  font-weight: 600;
+}
+
+.race-card-previous-run .race-card-run-race-name {
+  min-height: 36px;
+  font-weight: 600;
+}
+
+.race-card-previous-run .race-card-run-track {
+  color: #59636e;
+}
+
+.race-card-no-history {
+  align-self: center;
+  margin: 0 12px;
+  color: #6c757d;
+  font-size: 13px;
+}
+
 .table-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 20px;
+}
+
+.table-search-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.table-search-controls label {
+  font-weight: bold;
+  color: #333;
+}
+
+.table-search-controls input {
+  width: min(100%, 360px);
+  padding: 8px 12px;
+  border: 1px solid #adb5bd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.table-result-count {
+  color: #6c757d;
+  font-size: 13px;
 }
 
 .table-button {
@@ -217,6 +378,27 @@
 
 .data-table th {
   font-weight: bold;
+}
+
+.table-sort-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.table-sort-button:focus-visible {
+  outline: 2px solid #80bdff;
+  outline-offset: 3px;
+}
+
+.no-matches {
+  padding: 24px;
+  color: #6c757d;
+  text-align: center;
 }
 
 .data-table tbody tr:hover {

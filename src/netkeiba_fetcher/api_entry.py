@@ -12,9 +12,69 @@ from src.netkeiba_fetcher.netkeiba_prevrun_fetch import (
 from src.netkeiba_fetcher.db_register import (
     init_db,
     register_prev_run,
+    register_race_card_entries,
     register_race_fetch_status,
     update_race_fetch_status,
 )
+from src.netkeiba_fetcher.race_card import (
+    extract_race_card_entries,
+    extract_race_date,
+    get_race_card_text,
+)
+
+
+def _fetch_previous_runs(
+    race_id: str,
+    expected_race_date: str | None = None,
+) -> None:
+    """Fetch, parse, and register the previous-run data for one race."""
+    status_registered = False
+    try:
+        html_text = get_prev_run_text(race_id)
+        race_date = extract_race_date(html_text, race_id)
+        if expected_race_date is not None and race_date != expected_race_date:
+            raise ValueError(
+                f"開催日がレース一覧と一致しません: race_id={race_id}, "
+                f"一覧={expected_race_date}, ページ={race_date}"
+            )
+        register_race_fetch_status(race_id, race_date)
+        status_registered = True
+        update_race_fetch_status(race_id, html_fetched=True)
+        parsed_data = extract_prev_run_json(html_text)
+        update_race_fetch_status(race_id, parsed=True)
+        register_prev_run(parsed_data)
+        update_race_fetch_status(race_id, registered=True)
+    except Exception as exc:
+        if status_registered:
+            try:
+                update_race_fetch_status(race_id, error_message=str(exc))
+            except Exception as status_error:
+                print(
+                    f"Error recording status for race_id "
+                    f"{race_id}: {status_error}"
+                )
+        raise
+
+
+def fetch_netkeiba_previous_runs(race_id: str) -> None:
+    """Fetch and register previous-run data from one Netkeiba newspaper."""
+    if not (
+        isinstance(race_id, str)
+        and race_id.isdigit()
+        and len(race_id) == 12
+    ):
+        raise ValueError(f"race_id は12桁の数字である必要があります: {race_id!r}")
+
+    init_db()
+    _fetch_previous_runs(race_id)
+
+
+def fetch_and_register_race_card(race_id: str) -> int:
+    """Fetch and register the declared horses for one race."""
+    html = get_race_card_text(race_id)
+    entries = extract_race_card_entries(html, race_id)
+    init_db()
+    return register_race_card_entries(entries)
 
 
 def fetch_netkeiba_data_by_date_range(start_date: str, end_date: str) -> List[str]:
@@ -50,26 +110,10 @@ def fetch_netkeiba_data_by_date_range(start_date: str, end_date: str) -> List[st
 
             for race_id in race_ids:
                 try:
-                    register_race_fetch_status(race_id, race_date)
-                    html_text = get_prev_run_text(race_id)
-                    update_race_fetch_status(race_id, html_fetched=True)
-                    parsed_data = extract_prev_run_json(html_text)
-                    update_race_fetch_status(race_id, parsed=True)
-                    register_prev_run(parsed_data)
-                    update_race_fetch_status(race_id, registered=True)
+                    _fetch_previous_runs(race_id, race_date)
                     print(f"Fetched race_id: {race_id}")
                     processed_race_ids.append(race_id)
                 except Exception as e:
-                    try:
-                        update_race_fetch_status(
-                            race_id,
-                            error_message=str(e),
-                        )
-                    except Exception as status_error:
-                        print(
-                            f"Error recording status for race_id "
-                            f"{race_id}: {status_error}"
-                        )
                     print(f"Error processing race_id {race_id}: {e}")
         except Exception as e:
             print(f"Error fetching race IDs for date {date_str}: {e}")

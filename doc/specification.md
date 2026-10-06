@@ -102,10 +102,20 @@
 
 ### 5.3 Netkeiba の過去成績取得フロー
 
-1. `netkeiba_prevrun_fetch.py` が HTML を読込む
-2. レースIDやレース名、距離、開催場所などを抽出する
-3. 馬毎の結果データを整形し、`races` と `horse_race_results` へ分離して登録する
-4. `race_fetch_status` で HTML 取得・解析・登録の状態を管理する
+1. 当日出馬表URLをクリックすると、出馬表を別タブで開きながら、対象レースの取得処理を別APIで開始する
+2. `get_race_card_text` が当日出馬表を取得し、ページIDを検証してページタイトル記載の実開催日と、枠番・馬番・馬ID・馬名・性齢・斤量・騎手・厩舎・馬体重・オッズ・人気を `race_card_entries` に登録する
+3. お気に入り・馬メモ関連の列は取得・登録しない
+4. `get_prev_run_text` がnetkeibaの競馬新聞HTMLを取得し、`data/netkeiba/html/newspaper/` に保存する
+5. `extract_prev_run_json` が新聞HTMLから前走のレース・馬データを抽出する
+6. 馬毎の結果データを整形し、`races` と `horse_race_results` へ分離して登録する
+7. `race_fetch_status` は新聞HTMLのページIDと開催日を検証した実開催日で、HTML取得・解析・登録の状態を管理する
+8. 既存日付は `python -m src.netkeiba_fetcher.race_date_repair` でキャッシュ済み新聞HTMLと照合して補正できる
+
+#### 経路
+- `src/backend/server.py` → `fetch_and_register_race_card` → `get_race_card_text` → `extract_race_card_entries` → `register_race_card_entries`
+- 前走登録は `fetch_netkeiba_previous_runs` → `get_prev_run_text` → `extract_prev_run_json` → `register_prev_run`
+- 日付範囲での一括取得も、同じ新聞HTML取得・解析・登録処理を使用する
+- 当日出馬表URL一覧の「表示」ボタンは `GET /api/netkeiba/race-card/{race_id}` から対象レースだけを取得して出馬表画面を表示する
 
 ---
 
@@ -139,6 +149,11 @@
 - 各馬の成績を保存する詳細テーブル
 - 主キー: id
 - 例: race_id, horse_name, jockey, post, popularity, time, weight など
+
+#### `race_card_entries`
+- 出馬表の各馬と枠番・馬番・斤量・騎手・厩舎・馬体重・オッズ・人気を保存する
+- 主キー: `(race_id, horse_number)`
+- お気に入り・馬メモの情報は含めない
 
 #### `race_fetch_status`
 | カラム | 型 | 内容 |
@@ -177,6 +192,7 @@
 - `races` テーブルへのレース情報登録
 - `horse_race_results` テーブルへの成績登録
 - `race_fetch_status` への状態追跡
+- 競馬新聞HTMLの `data/netkeiba/html/newspaper/` への保存
 
 ---
 
