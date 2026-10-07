@@ -123,7 +123,7 @@ const DataRegistrationSection = ({ onFetchRaceCardUrls }) => {
     <div className="data-registration-section">
       <h2>データ登録</h2>
       <div className="registration-buttons">
-        <button className="register-button" onClick={onFetchRaceCardUrls}>
+        <button className="register-button" onClick={() => onFetchRaceCardUrls()}>
           当日出馬表URL取得
         </button>
         <button 
@@ -166,6 +166,8 @@ const DataRegistrationSection = ({ onFetchRaceCardUrls }) => {
 
 const RaceCardUrlView = ({
   raceDate,
+  onRaceDateChange,
+  onSearchDate,
   raceCards,
   loading,
   error,
@@ -176,17 +178,37 @@ const RaceCardUrlView = ({
 }) => (
   <section className="race-card-url-view">
     <div className="race-card-url-heading">
-      <h2>当日出馬表URL</h2>
+      <h2>出馬表URL</h2>
       <button className="table-button" onClick={onBack}>データ登録へ戻る</button>
     </div>
+    <form
+      className="date-inputs"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSearchDate(raceDate);
+      }}
+    >
+      <label>
+        開催日:
+        <input
+          type="date"
+          value={raceDate}
+          onChange={(event) => onRaceDateChange(event.target.value)}
+          required
+        />
+      </label>
+      <button className="table-button" type="submit" disabled={loading || !raceDate}>
+        この日付の出馬表を表示
+      </button>
+    </form>
     {raceDate && <p>{raceDate} のレース: {raceCards.length} 件</p>}
-    <div className="table-container" aria-label="当日出馬表URL一覧">
+    <div className="table-container" aria-label="出馬表URL一覧">
       {loading ? (
         <p>出馬表URLを取得中...</p>
       ) : error ? (
         <p className="error">出馬表URLを取得できませんでした: {error}</p>
       ) : raceCards.length === 0 ? (
-        <p className="no-data">当日の出馬表URLはありません</p>
+        <p className="no-data">この日付の出馬表はありません</p>
       ) : (
         <table className="data-table">
           <thead>
@@ -248,9 +270,9 @@ const RaceCardEntryView = ({
 }) => (
   <section className="race-card-url-view">
     <div className="race-card-url-heading">
-      <h2>当日出馬表: {raceId}</h2>
+      <h2>出馬表: {raceId}</h2>
       <button className="table-button" onClick={onBack}>
-        当日出馬表URLへ戻る
+        出馬表URLへ戻る
       </button>
     </div>
     {!loading && !error && entries.length > 0 && (
@@ -269,6 +291,28 @@ const RaceCardEntryView = ({
         <div className="race-card-newspaper">
           {entries.map((entry) => {
             const previousRuns = entry.previous_runs || [];
+            const raceDayResult = entry.race_day_result || {
+              race_id: entry.race_id,
+              race_date: entry.race_date,
+              horse_name: entry.horse_name,
+              post: entry.horse_number,
+              jockey: entry.jockey,
+              weight: entry.carried_weight,
+              horse_weight: entry.horse_weight,
+              weight_change: entry.weight_change,
+            };
+            const subsequentRuns = entry.subsequent_runs || [];
+            const timelineRuns = [
+              ...previousRuns.map((run, index) => ({
+                ...run,
+                display_label: index === 0 ? '前走' : `${index + 1}走前`,
+              })),
+              { ...raceDayResult, display_label: '当日' },
+              ...subsequentRuns.map((run, index) => ({
+                ...run,
+                display_label: `${index + 1}走後`,
+              })),
+            ];
             return (
               <article
                 className="race-card-horse-row"
@@ -291,14 +335,18 @@ const RaceCardEntryView = ({
                   </div>
                 </section>
                 <section className="race-card-previous-runs" aria-label={`${entry.horse_name}の過去成績`}>
-                  {previousRuns.length === 0 ? (
-                    <p className="race-card-no-history">登録済みの過去成績はありません</p>
-                  ) : previousRuns.map((run, index) => (
+                  {timelineRuns.map((run, index) => (
                     <article
-                      className="race-card-previous-run"
-                      key={`${run.race_id}-${index}`}
+                      className={`race-card-previous-run ${
+                        run.display_label === '当日'
+                          ? 'race-card-run-day'
+                          : run.display_label.endsWith('走後')
+                            ? 'race-card-run-future'
+                            : ''
+                      }`}
+                      key={`${run.race_id}-${run.display_label}-${index}`}
                     >
-                      <h4>{index === 0 ? '前走' : `${index + 1}走前`}</h4>
+                      <h4>{run.display_label}</h4>
                       <p className="race-card-run-title">
                         {[
                           run.race_date || '開催日不明',
@@ -321,7 +369,9 @@ const RaceCardEntryView = ({
                           .filter(Boolean).join('・') || '-'}
                       </p>
                       <p className="race-card-run-result">
-                        {run.tyakujun == null ? '-' : `${run.tyakujun}着`}
+                        {run.tyakujun == null
+                          ? (run.display_label === '当日' ? '結果未登録' : '-')
+                          : `${run.tyakujun}着`}
                         {run.time ? `・${run.time}` : ''}
                         {run.margin ? `・着差 ${run.margin}` : ''}
                         {run.pace ? `・${run.pace}` : ''}
@@ -552,12 +602,15 @@ const HomePage = () => {
     }
   };
 
-  const fetchRaceCardUrls = async () => {
+  const fetchRaceCardUrls = async (targetDate = '') => {
     setActiveSection('race-card-urls');
     setRaceCardLoading(true);
     setRaceCardError('');
     try {
-      const response = await fetch('/api/netkeiba/race-card-urls');
+      const query = targetDate
+        ? `?${new URLSearchParams({ race_date: targetDate }).toString()}`
+        : '';
+      const response = await fetch(`/api/netkeiba/race-card-urls${query}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
@@ -758,6 +811,8 @@ const HomePage = () => {
         ) : activeSection === 'race-card-urls' ? (
           <RaceCardUrlView
             raceDate={raceDate}
+            onRaceDateChange={setRaceDate}
+            onSearchDate={fetchRaceCardUrls}
             raceCards={raceCards}
             loading={raceCardLoading}
             error={raceCardError}

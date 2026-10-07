@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from src.backend.server import (
     fetch_netkeiba_race_data,
     get_registered_race_card,
+    get_netkeiba_race_card_urls,
 )
 from src.netkeiba_fetcher.api_entry import (
     fetch_netkeiba_data_by_date_range,
@@ -19,6 +20,9 @@ from src.netkeiba_fetcher.api_entry import (
 from src.netkeiba_fetcher.db_register import init_db, register_race_card_entries
 from src.netkeiba_fetcher.netkeiba_prevrun_fetch import get_prev_run_text
 from src.netkeiba_fetcher.race_card import extract_race_card_entries
+from src.netkeiba_fetcher.race_card import (
+    extract_newspaper_race_card_entries,
+)
 from src.netkeiba_fetcher.race_date_repair import (
     repair_race_dates_from_cached_newspapers,
 )
@@ -68,6 +72,51 @@ NEWSPAPER_HTML = """
 
 
 class TestSingleRaceNetkeibaFetch(unittest.TestCase):
+    def test_past_race_card_urls_are_loaded_from_registered_database_entries(self):
+        connection = MagicMock()
+        connection.cursor.return_value.fetchall.side_effect = [
+            [{"race_id": "200001010101"}],
+            [],
+            [{"race_id": "200001010101"}],
+            [],
+        ]
+
+        with (
+            patch(
+                "src.backend.server.get_connection",
+                return_value=connection,
+            ) as get_connection,
+            patch(
+                "src.backend.server.get_race_ids_by_date",
+            ) as get_live_race_ids,
+        ):
+            result = get_netkeiba_race_card_urls(date(2000, 1, 1))
+
+        self.assertEqual(result["race_date"], "2000-01-01")
+        self.assertEqual(
+            result["race_cards"],
+            [{
+                "race_id": "200001010101",
+                "url": (
+                    "https://race.netkeiba.com/race/shutuba.html"
+                    "?race_id=200001010101"
+                ),
+                "fetch_status": None,
+            }],
+        )
+        queries = connection.cursor.return_value.execute.call_args_list
+        self.assertEqual(len(queries), 4)
+        self.assertIn("FROM race_card_entries", queries[0].args[0])
+        self.assertEqual(queries[0].args[1], (date(2000, 1, 1),))
+        self.assertIn("FROM race_fetch_status", queries[1].args[0])
+        self.assertEqual(queries[1].args[1], (date(2000, 1, 1),))
+        self.assertIn("FROM horse_race_results", queries[2].args[0])
+        self.assertEqual(queries[2].args[1], ("20000101%",))
+        self.assertNotIn("UNION", "\n".join(query.args[0] for query in queries))
+        get_live_race_ids.assert_not_called()
+        self.assertEqual(get_connection.call_count, 2)
+        self.assertEqual(connection.close.call_count, 2)
+
     def test_single_race_fetch_registers_parsed_previous_runs(self):
         race_id = "202610020301"
         parsed_data = {"race_id": race_id, "horses": [{"horse_name": "テスト馬"}]}
@@ -170,6 +219,50 @@ class TestSingleRaceNetkeibaFetch(unittest.TestCase):
         self.assertEqual(params, ("202610020301",))
         self.assertNotIn("favorite", query.lower())
         self.assertNotIn("memo", query.lower())
+        connection.close.assert_called_once_with()
+
+    def test_registered_race_card_can_be_reconstructed_from_historical_results(self):
+        connection = MagicMock()
+        connection.cursor.return_value.fetchall.side_effect = [
+            [],
+            [{
+                "race_id": "202506010511",
+                "race_date": date(2025, 6, 1),
+                "frame_number": None,
+                "horse_number": 2,
+                "horse_id": None,
+                "horse_name": "結果DBから復元した馬",
+                "sex_age": None,
+                "carried_weight": Decimal("57.0"),
+                "jockey": "保存騎手",
+                "trainer_area": None,
+                "trainer": None,
+                "horse_weight": 480,
+                "weight_change": 2,
+                "win_odds": None,
+                "popularity": 3,
+            }],
+        ]
+
+        with patch(
+            "src.backend.server.get_connection",
+            return_value=connection,
+        ):
+            result = get_registered_race_card("202506010511")
+
+        self.assertEqual(result["entries"][0]["race_date"], "2025-06-01")
+        self.assertEqual(result["entries"][0]["horse_number"], 2)
+        self.assertEqual(
+            result["entries"][0]["horse_name"],
+            "結果DBから復元した馬",
+        )
+        self.assertEqual(result["entries"][0]["carried_weight"], 57.0)
+        self.assertEqual(result["entries"][0]["previous_runs"], [])
+        queries = [
+            call.args[0]
+            for call in connection.cursor.return_value.execute.call_args_list
+        ]
+        self.assertTrue(any("FROM horse_race_results" in query for query in queries))
         connection.close.assert_called_once_with()
 
     def test_registered_race_card_includes_horse_history_in_actual_date_order(self):
@@ -280,6 +373,83 @@ class TestSingleRaceNetkeibaFetch(unittest.TestCase):
         self.assertTrue(any("WHERE horse_id IN" in query for query in queries))
         self.assertTrue(any("FROM race_fetch_status" in query for query in queries))
 
+    def test_race_card_history_is_labeled_relative_to_the_selected_race_date(self):
+        race_id = "202601010301"
+        connection = MagicMock()
+        connection.cursor.return_value.fetchall.side_effect = [
+            [{
+                "race_id": race_id,
+                "race_date": date(2026, 1, 1),
+                "horse_number": 1,
+                "horse_id": "horse-1",
+                "horse_name": "検証馬",
+                "jockey": "当日騎手",
+                "carried_weight": Decimal("56.0"),
+            }],
+            [
+                {
+                    "horse_id": "horse-1",
+                    "race_id": "202512010101",
+                    "horse_name": "検証馬",
+                    "tyakujun": 3,
+                },
+                {
+                    "horse_id": "horse-1",
+                    "race_id": race_id,
+                    "horse_name": "検証馬",
+                    "post": 1,
+                    "tyakujun": 5,
+                },
+                {
+                    "horse_id": "horse-1",
+                    "race_id": "202601080101",
+                    "horse_name": "検証馬",
+                    "tyakujun": 2,
+                },
+                {
+                    "horse_id": "horse-1",
+                    "race_id": "202601150101",
+                    "horse_name": "検証馬",
+                    "tyakujun": 1,
+                },
+                {
+                    "horse_id": "horse-1",
+                    "race_id": "202602010101",
+                    "horse_name": "検証馬",
+                    "tyakujun": 4,
+                },
+            ],
+            [
+                {"race_id": "202512010101", "race_date": date(2025, 12, 1)},
+                {"race_id": race_id, "race_date": date(2026, 1, 1)},
+                {"race_id": "202601080101", "race_date": date(2026, 1, 8)},
+                {"race_id": "202601150101", "race_date": date(2026, 1, 15)},
+                {"race_id": "202602010101", "race_date": date(2026, 2, 1)},
+            ],
+            [
+                {"race_id": "202512010101", "race_name": "前年レース"},
+                {"race_id": race_id, "race_name": "対象レース"},
+                {"race_id": "202601080101", "race_name": "次走"},
+                {"race_id": "202601150101", "race_name": "2走後"},
+                {"race_id": "202602010101", "race_name": "3走後"},
+            ],
+        ]
+
+        with patch("src.backend.server.get_connection", return_value=connection):
+            result = get_registered_race_card(race_id)
+
+        entry = result["entries"][0]
+        self.assertEqual(
+            [run["race_id"] for run in entry["previous_runs"]],
+            ["202512010101"],
+        )
+        self.assertEqual(entry["race_day_result"]["race_id"], race_id)
+        self.assertEqual(entry["race_day_result"]["tyakujun"], 5)
+        self.assertEqual(
+            [run["race_id"] for run in entry["subsequent_runs"]],
+            ["202601080101", "202601150101"],
+        )
+
     def test_registered_race_card_endpoint_rejects_invalid_race_id(self):
         with self.assertRaises(HTTPException) as error:
             get_registered_race_card("not-a-race-id")
@@ -339,6 +509,49 @@ class TestSingleRaceNetkeibaFetch(unittest.TestCase):
     def test_race_card_parser_rejects_html_for_a_different_race(self):
         with self.assertRaisesRegex(ValueError, "race_id"):
             extract_race_card_entries(RACE_CARD_HTML, "202610010102")
+
+    def test_newspaper_race_card_parser_keeps_all_horses_and_horse_numbers(self):
+        race_id = "202506010511"
+        html = f"""
+        <html><head>
+          <meta property="og:url" content="https://race.netkeiba.com/race/newspaper_master.html?race_id={race_id}">
+          <title>レース | 2025年6月1日 東京11R - netkeiba</title>
+        </head><body>
+          <div class="HorseList_Wrapper">
+            <dl class="HorseList">
+              <dt class="Waku1">1</dt>
+              <dt class="Waku Waku_Horse">1</dt>
+              <dt class="HorseName"><a href="/horse/2024100001">テスト馬A</a></dt>
+              <dd class="Jockey"><span class="Barei">牡 3</span><a href="/jockey/1"><span class="Change">替</span>騎手A</a><span>57.0</span></dd>
+            </dl>
+            <dl class="HorseList">
+              <dt class="Waku2">2</dt>
+              <dt class="Waku Waku_Horse">3</dt>
+              <dt class="HorseName"><a href="/horse/2024100002">テスト馬B</a></dt>
+              <dd class="Jockey"><span class="Barei">牝 3</span><a href="/jockey/2">騎手B</a><span>55.0</span></dd>
+            </dl>
+          </div>
+          <div class="Type"><dt class="Horse07">480kg (+2) 4.5 (2人気)</dt></div>
+          <div class="Type"><dt class="Horse07">450kg (-4) 8.1 (3人気)</dt></div>
+        </body></html>
+        """
+
+        entries = extract_newspaper_race_card_entries(html, race_id)
+
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(
+            [(entry["frame_number"], entry["horse_number"]) for entry in entries],
+            [(1, 1), (2, 3)],
+        )
+        self.assertEqual(
+            [entry["horse_name"] for entry in entries],
+            ["テスト馬A", "テスト馬B"],
+        )
+        self.assertEqual(entries[0]["jockey"], "騎手A")
+        self.assertEqual(entries[0]["carried_weight"], Decimal("57.0"))
+        self.assertEqual(entries[0]["horse_weight"], 480)
+        self.assertEqual(entries[0]["weight_change"], 2)
+        self.assertIsNone(entries[0]["win_odds"])
 
     def test_page_date_is_taken_from_verified_title_not_race_id_prefix(self):
         from src.netkeiba_fetcher.race_card import extract_race_date

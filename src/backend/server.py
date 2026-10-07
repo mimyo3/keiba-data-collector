@@ -22,7 +22,11 @@ from src.netkeiba_fetcher.api_entry import (
     fetch_and_register_race_card,
     fetch_netkeiba_previous_runs,
 )
-from src.netkeiba_fetcher.netkeiba_prevrun_fetch import get_race_ids_by_date
+from src.netkeiba_fetcher.netkeiba_prevrun_fetch import (
+    NEWSPAPER_DIR,
+    get_race_ids_by_date,
+)
+from src.netkeiba_fetcher.race_card import extract_newspaper_race_card_entries
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -57,6 +61,15 @@ def _json_value(value: Any) -> Any:
     if isinstance(value, Decimal):
         return float(value)
     return value
+
+
+def _race_date_from_id(race_id: str | None) -> str | None:
+    if not race_id or len(race_id) != 12 or not race_id[:8].isdigit():
+        return None
+    try:
+        return datetime.strptime(race_id[:8], "%Y%m%d").date().isoformat()
+    except ValueError:
+        return None
 
 
 @app.get("/api/db/{table_name}")
@@ -219,6 +232,57 @@ def get_registered_race_card(race_id: str) -> dict[str, Any]:
             {key: _json_value(value) for key, value in row.items()}
             for row in cursor.fetchall()
         ]
+        if not entries:
+            newspaper_path = NEWSPAPER_DIR / f"race_sp_newspaper_{race_id}.html"
+            if newspaper_path.is_file():
+                newspaper_html = newspaper_path.read_text(encoding="utf-8")
+                entries = extract_newspaper_race_card_entries(
+                    newspaper_html,
+                    race_id,
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        race_id,
+                        (
+                            SELECT race_date
+                            FROM race_fetch_status
+                            WHERE race_id = %s
+                            LIMIT 1
+                        ) AS race_date,
+                        NULL AS frame_number,
+                        post AS horse_number,
+                        horse_id,
+                        horse_name,
+                        NULL AS sex_age,
+                        weight AS carried_weight,
+                        jockey,
+                        NULL AS trainer_area,
+                        NULL AS trainer,
+                        horse_weight,
+                        weight_change,
+                        NULL AS win_odds,
+                        popularity
+                    FROM horse_race_results
+                    WHERE race_id = %s
+                    ORDER BY post
+                    """,
+                    (race_id, race_id),
+                )
+                entries = [
+                    {
+                        **{
+                            key: _json_value(value)
+                            for key, value in row.items()
+                        },
+                        "race_date": (
+                            _json_value(row.get("race_date"))
+                            or _race_date_from_id(race_id)
+                        ),
+                    }
+                    for row in cursor.fetchall()
+                ]
 
         horse_ids = sorted({
             entry["horse_id"]
@@ -228,6 +292,7 @@ def get_registered_race_card(race_id: str) -> dict[str, Any]:
         histories_by_horse: dict[str, list[dict[str, Any]]] = {
             horse_id: [] for horse_id in horse_ids
         }
+        race_details: dict[str, dict[str, Any]] = {}
         if horse_ids:
             placeholders = ", ".join(["%s"] * len(horse_ids))
             cursor.execute(
@@ -266,11 +331,12 @@ def get_registered_race_card(race_id: str) -> dict[str, Any]:
             )
             history_rows = cursor.fetchall()
             history_race_ids = sorted({
-                row["race_id"] for row in history_rows if row.get("race_id")
-            })
+                row["race_id"]
+                for row in history_rows
+                if row.get("race_id")
+            } | {race_id})
 
             race_dates: dict[str, str] = {}
-            race_details: dict[str, dict[str, Any]] = {}
             if history_race_ids:
                 race_placeholders = ", ".join(
                     ["%s"] * len(history_race_ids)
@@ -330,10 +396,61 @@ def get_registered_race_card(race_id: str) -> dict[str, Any]:
                 )
 
         for entry in entries:
-            entry["previous_runs"] = histories_by_horse.get(
-                entry.get("horse_id"),
-                [],
+            horse_histories = histories_by_horse.get(entry.get("horse_id"), [])
+            target_race_date = entry.get("race_date")
+            previous_runs = []
+            subsequent_runs = []
+            race_day_result = None
+
+            for history in horse_histories:
+                if history.get("race_id") == race_id:
+                    race_day_result = history
+                    continue
+                history_date = history.get("race_date")
+                if not history_date or not target_race_date:
+                    continue
+                if history_date < target_race_date:
+                    previous_runs.append(history)
+                elif history_date > target_race_date:
+                    subsequent_runs.append(history)
+
+            previous_runs.sort(
+                key=lambda history: (history["race_date"], history["race_id"]),
+                reverse=True,
             )
+            subsequent_runs.sort(
+                key=lambda history: (history["race_date"], history["race_id"]),
+            )
+            race_day_result = {
+                **(race_details.get(race_id, {})),
+                **(race_day_result or {}),
+                "race_id": race_id,
+                "race_date": target_race_date,
+                "post": (
+                    (race_day_result or {}).get("post")
+                    or entry.get("horse_number")
+                ),
+                "jockey": (
+                    (race_day_result or {}).get("jockey")
+                    or entry.get("jockey")
+                ),
+                "weight": (
+                    (race_day_result or {}).get("weight")
+                    or entry.get("carried_weight")
+                ),
+                "horse_weight": (
+                    (race_day_result or {}).get("horse_weight")
+                    or entry.get("horse_weight")
+                ),
+                "weight_change": (
+                    (race_day_result or {}).get("weight_change")
+                    if (race_day_result or {}).get("weight_change") is not None
+                    else entry.get("weight_change")
+                ),
+            }
+            entry["previous_runs"] = previous_runs
+            entry["race_day_result"] = race_day_result
+            entry["subsequent_runs"] = subsequent_runs[:2]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:
@@ -371,10 +488,47 @@ def fetch_netkeiba_race_data(race_id: str) -> dict[str, Any]:
 @app.get("/api/netkeiba/race-card-urls")
 def get_netkeiba_race_card_urls(race_date: date | None = None) -> dict[str, Any]:
     """Return race-card URLs for the requested date, defaulting to today in Japan."""
-    target_date = race_date or datetime.now(ZoneInfo("Asia/Tokyo")).date()
-    date_string = target_date.strftime("%Y%m%d")
+    today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
+    target_date = race_date or today
     try:
-        race_ids = get_race_ids_by_date(date_string)
+        if target_date < today:
+            connection = get_connection()
+            try:
+                cursor = connection.cursor(dictionary=True)
+                cursor.execute(
+                    """
+                    SELECT DISTINCT race_id
+                    FROM race_card_entries
+                    WHERE race_date = %s
+                    """,
+                    (target_date,),
+                )
+                race_ids = {row["race_id"] for row in cursor.fetchall()}
+                cursor.execute(
+                    """
+                    SELECT race_id
+                    FROM race_fetch_status
+                    WHERE race_date = %s
+                    """,
+                    (target_date,),
+                )
+                race_ids.update(row["race_id"] for row in cursor.fetchall())
+                cursor.execute(
+                    """
+                    SELECT race_id
+                    FROM horse_race_results
+                    WHERE race_id LIKE %s
+                    """,
+                    (f"{target_date:%Y%m%d}%",),
+                )
+                race_ids.update(row["race_id"] for row in cursor.fetchall())
+                race_ids = sorted(race_ids)
+            finally:
+                connection.close()
+        else:
+            date_string = target_date.strftime("%Y%m%d")
+            race_ids = get_race_ids_by_date(date_string)
+
         fetch_status_by_id: dict[str, dict[str, Any]] = {}
         if race_ids:
             connection = get_connection()

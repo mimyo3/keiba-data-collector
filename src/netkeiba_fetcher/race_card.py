@@ -18,6 +18,9 @@ _HORSE_ID_RE = re.compile(r"/horse/(\d+)")
 _WEIGHT_RE = re.compile(r"(\d+)\s*\(\s*([+-]?\d+)\s*\)")
 _NUMBER_RE = re.compile(r"\d+")
 _RACE_DATE_RE = re.compile(r"(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日")
+_NEWSPAPER_WEIGHT_RE = re.compile(
+    r"(\d+)\s*kg\s*\(\s*([+-]?\d+)\s*\)"
+)
 _HEAD_TAG_RE = re.compile(r"<(?:meta|link)\b[^>]*>", re.IGNORECASE)
 _ATTRIBUTE_RE = re.compile(
     r"""([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"""
@@ -199,3 +202,103 @@ def extract_race_card_entries(
         raise ValueError(f"出馬表に馬番がない行があります: race_id={race_id}")
 
     return entries
+
+
+def extract_newspaper_race_card_entries(
+    html: str,
+    race_id: str,
+) -> list[dict[str, Any]]:
+    """Extract all current runners from a cached Netkeiba newspaper page."""
+    race_date = extract_race_date(html, race_id)
+    soup = BeautifulSoup(html, "html.parser")
+    wrapper = soup.select_one(".HorseList_Wrapper")
+    if wrapper is None:
+        raise ValueError(f"出馬表一覧が新聞HTMLにありません: race_id={race_id}")
+
+    horse_rows = wrapper.find_all("dl", class_="HorseList", recursive=False)
+    type_rows = soup.select("div.Type")
+    if not horse_rows or len(horse_rows) != len(type_rows):
+        raise ValueError(
+            f"新聞HTMLの出走馬情報が不完全です: race_id={race_id}, "
+            f"出走馬={len(horse_rows)}, 馬情報={len(type_rows)}"
+        )
+
+    entries: list[dict[str, Any]] = []
+    for row, type_row in zip(horse_rows, type_rows):
+        direct_cells = row.find_all("dt", recursive=False)
+        name_cell = row.find("dt", class_="HorseName", recursive=False)
+        horse_link = (
+            name_cell.select_one("a[href*='/horse/']")
+            if name_cell is not None
+            else None
+        )
+        jockey_cell = row.find("dd", class_="Jockey", recursive=False)
+        if len(direct_cells) < 3 or horse_link is None or jockey_cell is None:
+            raise ValueError(
+                f"新聞HTMLの出走馬行を解析できません: race_id={race_id}"
+            )
+
+        horse_weight_match = _NEWSPAPER_WEIGHT_RE.search(
+            type_row.select_one("dt.Horse07").get_text(" ", strip=True)
+            if type_row.select_one("dt.Horse07") is not None
+            else ""
+        )
+        jockey_link = jockey_cell.select_one("a[href*='/jockey/']")
+        horse_id_match = _HORSE_ID_RE.search(horse_link.get("href", ""))
+        jockey_name = (
+            jockey_link.get_text(" ", strip=True)
+            if jockey_link is not None
+            else None
+        )
+        if jockey_link is not None and jockey_name:
+            for change in jockey_link.select(".Change"):
+                change_text = change.get_text(" ", strip=True)
+                if change_text:
+                    jockey_name = jockey_name.replace(change_text, "").strip()
+        weight_text = next(
+            (
+                span.get_text(" ", strip=True)
+                for span in reversed(jockey_cell.find_all("span", recursive=False))
+                if _decimal(span.get_text(" ", strip=True)) is not None
+            ),
+            "",
+        )
+
+        entries.append(
+            {
+                "race_id": race_id,
+                "race_date": race_date,
+                "frame_number": _integer(direct_cells[0].get_text(" ", strip=True)),
+                "horse_number": _integer(direct_cells[1].get_text(" ", strip=True)),
+                "horse_id": horse_id_match.group(1) if horse_id_match else None,
+                "horse_name": horse_link.get_text(" ", strip=True),
+                "sex_age": (
+                    jockey_cell.select_one(".Barei").get_text(" ", strip=True)
+                    if jockey_cell.select_one(".Barei") is not None
+                    else None
+                ),
+                "carried_weight": _decimal(weight_text),
+                "jockey": (
+                    jockey_name
+                ),
+                "trainer_area": None,
+                "trainer": None,
+                "horse_weight": (
+                    int(horse_weight_match.group(1))
+                    if horse_weight_match
+                    else None
+                ),
+                "weight_change": (
+                    int(horse_weight_match.group(2))
+                    if horse_weight_match
+                    else None
+                ),
+                "win_odds": None,
+                "popularity": None,
+            }
+        )
+
+    if any(entry["horse_number"] is None for entry in entries):
+        raise ValueError(f"新聞HTMLに馬番がない出走馬があります: race_id={race_id}")
+
+    return sorted(entries, key=lambda entry: entry["horse_number"])

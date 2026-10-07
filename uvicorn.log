@@ -1,18 +1,13 @@
-INFO:     Started server process [306305]
+INFO:     Started server process [863307]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-INFO:     127.0.0.1:44862 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44866 - "GET /static/css/main.dc99f6d0.css HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44862 - "GET /static/js/main.f65f83c3.js HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44866 - "GET /favicon.ico HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44868 - "GET /manifest.json HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44866 - "GET /logo192.png HTTP/1.1" 200 OK
-INFO:     127.0.0.1:44862 - "GET /api/db/horse_race_results?page=1&limit=100 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:33908 - "GET /api/db/horse_race_results?page=2&limit=100 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:33908 - "GET /api/db/horse_race_results?page=1&limit=100 HTTP/1.1" 200 OK
-netkeiba レース一覧 HTML を取得中: kaisai_date=20261007
-netkeiba レース一覧 HTML を /home/nori/dev/autogen_test/sandbox/data/netkeiba/html/race_list/race_list_sub_20261007.html に保存しました (date=20261007)
-20261007 のレースを 0 件取得しました: []
-INFO:     127.0.0.1:60446 - "GET /api/netkeiba/race-card-urls HTTP/1.1" 200 OK
-INFO:     127.0.0.1:45326 - "GET /api/db/horse_race_results?page=1&limit=100&search=2024103607 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52484 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52484 - "GET /static/js/main.72d0be6f.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52496 - "GET /static/css/main.b76cb40a.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52484 - "GET /api/db/horse_race_results?page=1&limit=100 HTTP/1.1" 200 OK
+キャッシュのレース一覧 HTML を使用: /home/nori/dev/autogen_test/sandbox/data/netkeiba/html/race_list/race_list_sub_20261008.html
+20261008 のレースを 0 件取得しました: []
+INFO:     127.0.0.1:52484 - "GET /api/netkeiba/race-card-urls HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40764 - "GET /api/netkeiba/race-card-urls?race_date=2026-08-01 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40764 - "GET /api/netkeiba/race-card/202601010301 HTTP/1.1" 200 OK

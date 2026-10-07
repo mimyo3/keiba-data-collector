@@ -114,7 +114,7 @@ describe('table scrolling', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: '当日出馬表URL取得' }));
 
-    expect(await screen.findByRole('heading', { name: '当日出馬表URL' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '出馬表URL' })).toBeInTheDocument();
     expect(await screen.findByText('202610010101')).toBeInTheDocument();
     const raceCardLink = screen.getByRole('link', { name: 'https://race.netkeiba.com/race/shutuba.html?race_id=202610010101' });
     expect(raceCardLink)
@@ -161,6 +161,26 @@ describe('table scrolling', () => {
             weight_change: 2,
             win_odds: 4.5,
             popularity: 2,
+            race_day_result: {
+              race_id: '202605040102',
+              race_date: '2026-10-03',
+              race_name: '対象レース当日',
+              tyakujun: 3,
+            },
+            subsequent_runs: [
+              {
+                race_id: '202610100102',
+                race_date: '2026-10-10',
+                race_name: '対象レースの次走',
+                tyakujun: 2,
+              },
+              {
+                race_id: '202610170102',
+                race_date: '2026-10-17',
+                race_name: '対象レースの2走後',
+                tyakujun: 1,
+              },
+            ],
             previous_runs: [
               {
                 race_id: '202506010511',
@@ -224,23 +244,29 @@ describe('table scrolling', () => {
     render(<HomePage />);
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole('button', { name: '当日出馬表URL取得' }));
-    await screen.findByRole('heading', { name: '当日出馬表URL' });
+    await screen.findByRole('heading', { name: '出馬表URL' });
 
     const showButtons = screen.getAllByRole('button', { name: '表示' });
     expect(showButtons).toHaveLength(2);
     fireEvent.click(showButtons[1]);
 
-    expect(await screen.findByRole('heading', { name: '当日出馬表: 202605040102' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '出馬表: 202605040102' })).toBeInTheDocument();
     expect(fetch).toHaveBeenLastCalledWith('/api/netkeiba/race-card/202605040102');
     expect(await screen.findByText('対象レースの馬')).toBeInTheDocument();
     expect(screen.getByText('2026-10-03・1頭')).toBeInTheDocument();
     expect(screen.getByText('前走')).toBeInTheDocument();
     expect(screen.getByText('2走前')).toBeInTheDocument();
+    expect(screen.getByText('当日')).toBeInTheDocument();
+    expect(screen.getByText('1走後')).toBeInTheDocument();
+    expect(screen.getByText('2走後')).toBeInTheDocument();
     const historyCards = document.querySelectorAll('.race-card-previous-run');
     expect(historyCards[0]).toHaveTextContent('2025-06-01 東京 11R G1');
     expect(historyCards[1]).toHaveTextContent('2025-05-01 東京 11R');
     expect(historyCards[0]).toHaveTextContent('日本ダービー');
     expect(historyCards[1]).toHaveTextContent('青葉賞');
+    expect(historyCards[2]).toHaveTextContent('対象レース当日');
+    expect(historyCards[3]).toHaveTextContent('対象レースの次走');
+    expect(historyCards[4]).toHaveTextContent('対象レースの2走後');
     expect(historyCards[0]).toHaveTextContent('日本ダービー・3歳・18頭・2番・2人気');
     expect(historyCards[0]).toHaveTextContent('芝・2400m・良・内有利');
     expect(historyCards[0]).toHaveTextContent('1着・2:25.0・着差 クビ・M・持続戦');
@@ -252,8 +278,8 @@ describe('table scrolling', () => {
     expect(screen.queryByText('202605040101')).not.toBeInTheDocument();
     expect(screen.queryByText(/お気に入り|馬メモ/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '当日出馬表URLへ戻る' }));
-    expect(await screen.findByRole('heading', { name: '当日出馬表URL' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '出馬表URLへ戻る' }));
+    expect(await screen.findByRole('heading', { name: '出馬表URL' })).toBeInTheDocument();
   });
 
   test('URL list shows previous-run fetches already registered in the database', async () => {
@@ -282,5 +308,61 @@ describe('table scrolling', () => {
 
     expect(await screen.findByText('取得済み')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('searching a past date displays race cards saved in the database', async () => {
+    fetch
+      .mockResolvedValueOnce(createResponse([{ id: 'row-1' }], 1))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          race_date: '2026-10-07',
+          race_cards: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          race_date: '2025-06-01',
+          race_cards: [{
+            race_id: '202506010511',
+            url: 'https://race.netkeiba.com/race/shutuba.html?race_id=202506010511',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          race_id: '202506010511',
+          entries: [{
+            race_id: '202506010511',
+            race_date: '2025-06-01',
+            horse_number: 1,
+            horse_name: '保存済みの過去レース馬',
+            previous_runs: [],
+          }],
+        }),
+      });
+
+    render(<HomePage />);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: '当日出馬表URL取得' }));
+    await screen.findByRole('heading', { name: '出馬表URL' });
+
+    fireEvent.change(screen.getByLabelText('開催日:'), {
+      target: { value: '2025-06-01' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'この日付の出馬表を表示' }));
+
+    expect(await screen.findByText('202506010511')).toBeInTheDocument();
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      '/api/netkeiba/race-card-urls?race_date=2025-06-01',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '表示' }));
+    expect(await screen.findByText('保存済みの過去レース馬')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '出馬表: 202506010511' }))
+      .toBeInTheDocument();
   });
 });

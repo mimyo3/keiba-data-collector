@@ -238,6 +238,16 @@
   background: #fff;
 }
 
+.race-card-run-day {
+  border-color: #3979a8;
+  background: #f1f8fc;
+}
+
+.race-card-run-future {
+  border-color: #7b9d73;
+  background: #f5faf3;
+}
+
 .race-card-previous-run h4 {
   margin: 0 0 6px;
   color: #fff;
@@ -245,6 +255,14 @@
   font-weight: 600;
   text-align: center;
   background: #536b7a;
+}
+
+.race-card-run-day h4 {
+  background: #276b9b;
+}
+
+.race-card-run-future h4 {
+  background: #5d8054;
 }
 
 .race-card-previous-run .race-card-run-title {
