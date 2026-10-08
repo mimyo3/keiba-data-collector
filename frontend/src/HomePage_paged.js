@@ -303,14 +303,14 @@ const RaceCardEntryView = ({
             };
             const subsequentRuns = entry.subsequent_runs || [];
             const timelineRuns = [
+              ...subsequentRuns.slice().reverse().map((run, index) => ({
+                ...run,
+                display_label: `${subsequentRuns.length - index}走後`,
+              })),
+              { ...raceDayResult, display_label: '当日' },
               ...previousRuns.map((run, index) => ({
                 ...run,
                 display_label: index === 0 ? '前走' : `${index + 1}走前`,
-              })),
-              { ...raceDayResult, display_label: '当日' },
-              ...subsequentRuns.map((run, index) => ({
-                ...run,
-                display_label: `${index + 1}走後`,
               })),
             ];
             return (
